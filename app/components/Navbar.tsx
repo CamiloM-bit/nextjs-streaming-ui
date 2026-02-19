@@ -21,17 +21,18 @@ export default function Navbar() {
   }, [pathname])
 
   return (<>
-    <header className="flex items-center border border-blue-800 h-16">
-      <div className="border border-red-800 flex-1 h-full">
-        <div className="border border-orange-600"> {/* Perfil Container */}
-          <div className="">
-            <figure></figure>
+    <header className="flex items-center border border-orange-800  fixed  h-[12%] w-full" >
+      <div className="border border-red-800  w-[15%] h-full">
+        <div className="border border-orange-600 h-full content-center"> {/* Logo Container */}
+          <div>
+            <figure className="border border-red-500 m-2.5 flex justify-center">
+              <img className="w-37.5 text-center"  src="https://tv.selectra.com/sites/tv.selectra.com/files/styles/article_hero/public/images/logos/netflix-logo.png?itok=fCUER-69" alt="Logo" />
+            </figure>
           </div>
         </div>
       </div>
-      {<nav className="flex-1 border border-orange-400 w-1/2 h-full content-center">
-        <Link href="/es" onFocus={() => {
-          setActive("/es")           // cambia visual inmediato
+      {<nav className="flex-1 border border-blue-400  h-full content-center pl-6">
+        <Link href="/es" onFocus={() => { setActive("/es")           // cambia visual inmediato
           router.replace("/es")      // cambia ruta real
         }}
           className={`outline-0 p-1.5 px-3 rounded-4xl transition
