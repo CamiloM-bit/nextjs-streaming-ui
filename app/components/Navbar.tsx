@@ -32,34 +32,34 @@ export default function Navbar() {
         </div>
       </div>
       {<nav className="flex-1 border border-blue-400  h-full content-center pl-6">
-        <Link href="/es" onFocus={() => { setActive("/es")           // cambia visual inmediato
-          router.replace("/es")      // cambia ruta real
+        <Link href="/es" onFocus={() => { setActive("/es")           // cambia visual Rapido 
+          router.replace("/es")       // Remplaza la ruta real 
         }}
           className={`outline-0 p-1.5 px-3 rounded-4xl transition
           ${active === "/es"
               ? "bg-neutral-500 text-white"
               : "hover:bg-neutral-500"}`}>
           Inicio
-        </Link> {" "} {/* {""} ----> Genera Espacios */}
+        </Link> {" "} {/* {""} ----> Generacion de espacios */}
         <Link href="/Peliculas" onFocus={() => {
-          setActive("/Peliculas")           // cambia visual inmediato
-          router.replace("/Peliculas")      // cambia ruta real
+          setActive("/Peliculas")           
+          router.replace("/Peliculas")      
         }}
           className={`outline-0 p-1.5 px-3 rounded-4xl transition
           ${active === "/Peliculas"
               ? "bg-neutral-500 text-white"
               : "hover:bg-neutral-500"}`}>Películas</Link> {" "}
         <Link href="/Series" onFocus={() => {
-          setActive("/Series")           // cambia visual inmediato
-          router.replace("/Series")      // cambia ruta real
+          setActive("/Series")  
+          router.replace("/Series")    
         }}
           className={`outline-0 p-1.5 px-3 rounded-4xl transition
           ${active === "/Series"
               ? "bg-neutral-500 text-white"
               : "hover:bg-neutral-500"}`}> Series</Link> {" "}
         <Link href="/MiLista" onFocus={() => {
-          setActive("/MiLista")           // cambia visual inmediato
-          router.replace("/MiLista")      // cambia ruta real
+          setActive("/MiLista")          
+          router.replace("/MiLista")      
         }}
           className={`outline-0 p-1.5 px-3 rounded-4xl transition
           ${active === "/MiLista"

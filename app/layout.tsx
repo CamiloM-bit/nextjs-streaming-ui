@@ -34,7 +34,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className={notoMono.variable}>
+    <html lang="es" > {/* className={notoMono.variable} */} {/* Poner font globalmente */}
       <body className=" h-auto overflow-y-none">
         <section className="z-0 h-full bottom-0 w-full absolute overflow-y-auto">
           {children}
