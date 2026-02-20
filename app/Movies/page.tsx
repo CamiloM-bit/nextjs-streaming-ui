@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 export default function Page() {
   return (
     <div>
-      <h1>Peliculas</h1>
+      <h1>Seccion Peliculas</h1>
     </div>
   )
 }
