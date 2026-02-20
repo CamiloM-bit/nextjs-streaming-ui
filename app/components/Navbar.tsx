@@ -35,36 +35,47 @@ export default function Navbar() {
         <Link href="/es" onFocus={() => { setActive("/es")           // cambia visual Rapido 
           router.replace("/es")       // Remplaza la ruta real 
         }}
-          className={`outline-0 p-1.5 px-3 rounded-4xl transition
+          className={`outline-0 p-1.5 px-3 relative text-gray-300  transition
           ${active === "/es"
-              ? "bg-neutral-500 text-white"
-              : "hover:bg-neutral-500"}`}>
+              ? " text-white"
+              : "hover:text-white"}`}>
           Inicio
+          
         </Link> {" "} {/* {""} ----> Generacion de espacios */}
-        <Link href="/Peliculas" onFocus={() => {
-          setActive("/Peliculas")           
-          router.replace("/Peliculas")      
+         {" "}
+        <Link href="/TVShows" onFocus={() => {
+          setActive("/TVShows")  
+          router.replace("/TVShows")    
         }}
-          className={`outline-0 p-1.5 px-3 rounded-4xl transition
-          ${active === "/Peliculas"
-              ? "bg-neutral-500 text-white"
-              : "hover:bg-neutral-500"}`}>Películas</Link> {" "}
-        <Link href="/Series" onFocus={() => {
-          setActive("/Series")  
-          router.replace("/Series")    
+          className={`outline-0 p-1.5 px-3 text-gray-300 transition
+          ${active === "/TVShows"
+              ? " text-white"
+              : "hover:text-white"}`}> TV Shows</Link> {" "}
+              <Link href="/Movies" onFocus={() => {
+          setActive("/Movies")           
+          router.replace("/Movies")      
         }}
-          className={`outline-0 p-1.5 px-3 rounded-4xl transition
-          ${active === "/Series"
-              ? "bg-neutral-500 text-white"
-              : "hover:bg-neutral-500"}`}> Series</Link> {" "}
+          className={`outline-0 p-1.5 px-3  text-gray-300 transition
+          ${active === "/Movies"
+              ? " text-white"
+              : "hover:text-white"}`}>Movies</Link>
+          
+          <Link href="/New&Popular" onFocus={() => {
+          setActive("/New&Popular")           
+          router.replace("/New&Popular")      
+        }}
+          className={`outline-0 p-1.5 px-3  text-gray-300 transition
+          ${active === "/New&Popular"
+              ? " text-white"
+              : "hover:text-white"}`}>New & Popular</Link>
         <Link href="/MiLista" onFocus={() => {
           setActive("/MiLista")          
           router.replace("/MiLista")      
         }}
-          className={`outline-0 p-1.5 px-3 rounded-4xl transition
+          className={`outline-0 p-1.5 px-3 text-gray-300 transition
           ${active === "/MiLista"
-              ? "bg-neutral-500 text-white"
-              : "hover:bg-neutral-500"}`}>Mi Lista</Link> {" "}
+              ? " text-white"
+              : "hover:text-white"}`}>My List</Link> {" "}
       </nav>}
       <div className="flex-1 border border-blue-700">
 
