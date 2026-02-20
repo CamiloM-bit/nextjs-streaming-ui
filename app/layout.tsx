@@ -36,7 +36,7 @@ export default function RootLayout({
   return (
     <html lang="es" className={notoMono.variable}>
       <body className=" h-auto overflow-y-none">
-        <section className="bg-red-700 z-0 h-full bottom-0 w-full absolute overflow-y-auto">
+        <section className="z-0 h-full bottom-0 w-full absolute overflow-y-auto">
           {children}
         </section>
         <Navbar />

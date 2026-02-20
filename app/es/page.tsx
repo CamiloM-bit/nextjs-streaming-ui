@@ -11,12 +11,7 @@ export default function Page() {
   return (
     <div className="h-auto border border-blue-600 ">
       <section className="border border-red-500 h-70">
-        <a href="https://www.google.com/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="px-4 py-2 focus:bg-blue-900">
-          Google
-        </a>
+       
       </section>
     </div>
   )
