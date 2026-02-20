@@ -23,7 +23,7 @@ export default function Navbar() {
   return (<>
     <header className="flex items-center border border-orange-800  fixed  h-[12%] w-full" >
       <div className="border border-red-800  w-[15%] h-full">
-        <div className="border border-orange-600 h-full content-center"> {/* Logo Container */}
+        <div className="border border-orange-500 h-full content-center"> {/* Logo Container */}
           <div>
             <figure className="border border-red-500 m-2.5 flex justify-center">
               <img className="w-37.5 text-center"  src="https://tv.selectra.com/sites/tv.selectra.com/files/styles/article_hero/public/images/logos/netflix-logo.png?itok=fCUER-69" alt="Logo" />
