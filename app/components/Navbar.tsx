@@ -83,7 +83,7 @@ export default function Navbar() {
 
         <Link href="/Collections" onFocus={() => {
           setActive("/Collections")
-          router.replace("/Collections")
+          router.replace("/Collections") 
         }}
           className={`outline-0 p-1.5 px-3  text-gray-300 transition
           ${active === "/Collections"
