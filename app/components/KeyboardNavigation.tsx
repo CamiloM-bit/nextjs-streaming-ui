@@ -6,7 +6,7 @@ export default function KeyboardNavigation() {
   useEffect(() => {
     const getFocusable = () =>
       Array.from(
-        document.querySelectorAll<HTMLElement>("a, button, [tabindex]")
+        document.querySelectorAll<HTMLElement>("a, button, [tabindex='0']")
       ).filter(el => !el.hasAttribute("disabled"));
 
     const getClosest = (
@@ -57,7 +57,8 @@ export default function KeyboardNavigation() {
       const focusable = getFocusable();
       if (focusable.length === 0) return;
 
-      let current = document.activeElement as HTMLElement;
+      let current =
+        document.activeElement as HTMLElement;
 
       if (!focusable.includes(current)) {
         focusable[0].focus();
@@ -94,39 +95,8 @@ export default function KeyboardNavigation() {
     };
 
     window.addEventListener("keydown", handleKeyDown);
-
-    // ✅ AGREGADO 1: detectar webOS TV
-    const isTV = /webOS|SmartTV|TV/i.test(navigator.userAgent);
-
-    // ✅ AGREGADO 2: ocultar cursor en TV
-    if (isTV) {
-      const style = document.createElement("style");
-      style.innerHTML = `* { cursor: none !important; }`;
-      document.head.appendChild(style);
-    }
-
-    // ✅ AGREGADO 3: focus inicial automático
-    const focusable = getFocusable();
-    if (focusable.length > 0) {
-      focusable[0].focus();
-    }
-
-    // ✅ AGREGADO 4: recuperar focus si se pierde (muy común en webOS)
-    const restoreFocus = () => {
-      const focusable = getFocusable();
-      if (!document.activeElement || document.activeElement === document.body) {
-        focusable[0]?.focus();
-      }
-    };
-
-    window.addEventListener("click", restoreFocus);
-    window.addEventListener("blur", restoreFocus);
-
-    return () => {
+    return () =>
       window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("click", restoreFocus);
-      window.removeEventListener("blur", restoreFocus);
-    };
   }, []);
 
   return null;
