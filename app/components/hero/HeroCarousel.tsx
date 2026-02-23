@@ -73,6 +73,7 @@ export default function HeroCarousel({
   const playerRef = useRef<any>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const isMutedRef = useRef(isMuted);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const currentMovie = movies[currentIndex];
 
@@ -280,16 +281,6 @@ export default function HeroCarousel({
     };
   }, [isHovered, currentMovie, getTrailerKey, trailerDelay]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') prevSlide();
-      if (e.key === 'ArrowRight') nextSlide();
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [nextSlide, prevSlide]);
-
   if (!movies || movies.length === 0) return null;
 
   const extraInfo = getExtraInfo(currentMovie);
@@ -297,6 +288,7 @@ export default function HeroCarousel({
 
   return (
     <div 
+      ref={containerRef}
       className="relative w-full h-full bg-black group"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -390,7 +382,6 @@ export default function HeroCarousel({
                   onError={() => setLogoLoaded(false)}
                   style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.8))' }}
                 />
-                {/* Fallback si la imagen falla */}
                 {!logoLoaded && (
                   <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold text-white leading-tight drop-shadow-lg">
                     {currentMovie.title || currentMovie.name}
@@ -411,18 +402,25 @@ export default function HeroCarousel({
 
           {/* Botones */}
           <div className="flex flex-wrap items-center gap-4">
-            <button className="flex items-center gap-2 px-8 py-3 bg-white text-black font-bold rounded hover:bg-gray-200 transition-colors">
+            <button 
+              tabIndex={0}
+              className="flex items-center gap-2 px-8 py-3 bg-white text-black font-bold rounded hover:bg-gray-200 transition-colors"
+            >
               <Play className="w-5 h-5 fill-black" />
               Reproducir
             </button>
             
-            <button className="flex items-center gap-2 px-8 py-3 bg-gray-500/70 text-white font-bold rounded hover:bg-gray-500/50 transition-colors backdrop-blur-sm">
+            <button 
+              tabIndex={0}
+              className="flex items-center gap-2 px-8 py-3 bg-gray-500/70 text-white font-bold rounded hover:bg-gray-500/50 transition-colors backdrop-blur-sm"
+            >
               <Info className="w-5 h-5" />
               Más información
             </button>
 
             {showTrailer && trailerKey && (
               <button
+                tabIndex={0}
                 onClick={(e) => {
                   e.stopPropagation();
                   toggleMute();
@@ -444,8 +442,9 @@ export default function HeroCarousel({
         </div>
       </div>
 
-      {/* Controles */}
+      {/* Controles de navegación con tabIndex */}
       <button
+        tabIndex={0}
         onClick={prevSlide}
         className="absolute left-4 top-1/2 -translate-y-1/2 z-40 p-3 bg-black/30 hover:bg-black/50 text-white rounded-full backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100"
         aria-label="Anterior"
@@ -454,6 +453,7 @@ export default function HeroCarousel({
       </button>
 
       <button
+        tabIndex={0}
         onClick={nextSlide}
         className="absolute right-4 top-1/2 -translate-y-1/2 z-40 p-3 bg-black/30 hover:bg-black/50 text-white rounded-full backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100"
         aria-label="Siguiente"
@@ -461,11 +461,12 @@ export default function HeroCarousel({
         <ChevronRight className="w-6 h-6" />
       </button>
 
-      {/* Dots */}
+      {/* Dots indicadores con tabIndex */}
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-40 flex gap-2">
         {movies.map((_, index) => (
           <button
             key={index}
+            tabIndex={0}
             onClick={() => goToSlide(index)}
             className={`transition-all duration-300 rounded-full ${
               index === currentIndex 
