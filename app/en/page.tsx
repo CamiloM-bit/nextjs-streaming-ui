@@ -21,6 +21,16 @@ interface Season {
   episode_count: number;
 }
 
+interface Logo {
+  aspect_ratio: number;
+  height: number;
+  iso_639_1: string;
+  file_path: string;
+  vote_average: number;
+  vote_count: number;
+  width: number;
+}
+
 interface Movie {
   id: number;
   title: string;
@@ -39,7 +49,8 @@ interface Movie {
   number_of_episodes?: number;
   seasons?: Season[];
   runtime?: number;
-  ageRating?: string; // Formato +7, +12, +16, +18
+  ageRating?: string;
+  logo_path?: string; // Logo del título en imagen
 }
 
 async function getTrendingMovies(): Promise<Movie[]> {
@@ -74,6 +85,7 @@ async function getTrendingMovies(): Promise<Movie[]> {
         const endpoint = isTV ? 'tv' : 'movie';
         
         try {
+          // Obtener videos
           const videosRes = await fetch(
             `${TMDB_BASE_URL}/${endpoint}/${item.id}/videos?api_key=${TMDB_API_KEY}&language=es-ES&include_video_language=en,es`,
             { 
@@ -84,6 +96,7 @@ async function getTrendingMovies(): Promise<Movie[]> {
           
           const videosData = videosRes.ok ? await videosRes.json() : { results: [] };
 
+          // Obtener detalles completos
           const detailsRes = await fetch(
             `${TMDB_BASE_URL}/${endpoint}/${item.id}?api_key=${TMDB_API_KEY}&language=es-ES`,
             { 
@@ -109,6 +122,28 @@ async function getTrendingMovies(): Promise<Movie[]> {
                 runtime: detailsData.runtime,
               };
             }
+          }
+
+          // Obtener imágenes (logos)
+          let logoPath = '';
+          try {
+            const imagesRes = await fetch(
+              `${TMDB_BASE_URL}/${endpoint}/${item.id}/images?api_key=${TMDB_API_KEY}`,
+              { next: { revalidate: 86400 }, cache: 'force-cache' }
+            );
+            
+            if (imagesRes.ok) {
+              const imagesData = await imagesRes.json();
+              // Buscar logo en español primero, luego en inglés
+              const logos: Logo[] = imagesData.logos || [];
+              const esLogo = logos.find((l: Logo) => l.iso_639_1 === 'es');
+              const enLogo = logos.find((l: Logo) => l.iso_639_1 === 'en');
+              const anyLogo = logos[0];
+              
+              logoPath = esLogo?.file_path || enLogo?.file_path || anyLogo?.file_path || '';
+            }
+          } catch (logoError) {
+            console.error(`Error fetching logo for ${item.id}:`, logoError);
           }
 
           // Obtener clasificación de edad
@@ -152,6 +187,7 @@ async function getTrendingMovies(): Promise<Movie[]> {
             ...item,
             videos: videosData,
             ageRating,
+            logo_path: logoPath,
             ...extraDetails,
           };
         } catch (error) {
@@ -160,6 +196,7 @@ async function getTrendingMovies(): Promise<Movie[]> {
             ...item, 
             videos: { results: [] },
             ageRating: '',
+            logo_path: '',
           };
         }
       })
@@ -173,25 +210,20 @@ async function getTrendingMovies(): Promise<Movie[]> {
   }
 }
 
-// Función para convertir certificaciones a formato +edad
 function convertToAgeFormat(cert: string): string {
   if (!cert) return '';
   
-  // Mapeo de certificaciones a edades
   const ageMap: { [key: string]: string } = {
-    // Sistema español (ICAA)
     'APTA': '+0',
     '7': '+7',
     '12': '+12',
     '16': '+16',
     '18': '+18',
-    // Sistema USA (MPAA)
     'G': '+0',
     'PG': '+7',
     'PG-13': '+12',
     'R': '+16',
     'NC-17': '+18',
-    // Sistema TV (USA)
     'TV-Y': '+0',
     'TV-Y7': '+7',
     'TV-G': '+0',
@@ -222,7 +254,7 @@ export default async function Page() {
       <div 
         className="relative w-full overflow-hidden bg-black"
         style={{ 
-          height: '30vh',
+          height: '85vh',
           minHeight: '600px'
         }}
       >

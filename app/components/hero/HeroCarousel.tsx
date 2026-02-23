@@ -45,6 +45,7 @@ interface Movie {
   seasons?: Season[];
   runtime?: number;
   ageRating?: string;
+  logo_path?: string;
 }
 
 interface HeroCarouselProps {
@@ -65,6 +66,7 @@ export default function HeroCarousel({
   const [isMuted, setIsMuted] = useState(false);
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
+  const [logoLoaded, setLogoLoaded] = useState(false);
   
   const autoPlayRef = useRef<NodeJS.Timeout | null>(null);
   const trailerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -77,6 +79,10 @@ export default function HeroCarousel({
   useEffect(() => {
     isMutedRef.current = isMuted;
   }, [isMuted]);
+
+  useEffect(() => {
+    setLogoLoaded(false);
+  }, [currentIndex]);
 
   useEffect(() => {
     if (!window.YT && !document.getElementById('youtube-api')) {
@@ -214,6 +220,7 @@ export default function HeroCarousel({
     setShowTrailer(false);
     setTrailerKey(null);
     setPlayerReady(false);
+    setLogoLoaded(false);
   }, [movies.length]);
 
   const prevSlide = useCallback(() => {
@@ -221,6 +228,7 @@ export default function HeroCarousel({
     setShowTrailer(false);
     setTrailerKey(null);
     setPlayerReady(false);
+    setLogoLoaded(false);
   }, [movies.length]);
 
   const goToSlide = (index: number) => {
@@ -228,6 +236,7 @@ export default function HeroCarousel({
     setShowTrailer(false);
     setTrailerKey(null);
     setPlayerReady(false);
+    setLogoLoaded(false);
   };
 
   useEffect(() => {
@@ -284,6 +293,7 @@ export default function HeroCarousel({
   if (!movies || movies.length === 0) return null;
 
   const extraInfo = getExtraInfo(currentMovie);
+  const hasLogo = currentMovie.logo_path && currentMovie.logo_path.length > 0;
 
   return (
     <div 
@@ -330,19 +340,17 @@ export default function HeroCarousel({
       <div className="relative z-30 flex flex-col justify-center h-full px-8 md:px-16 lg:px-24 max-w-4xl">
         <div className="transition-all duration-500">
           {/* Badge y metadata */}
-          <div className="flex items-center gap-3 mb-4 flex-wrap">
+          <div className="flex items-center gap-3 mb-6 flex-wrap">
             <span className="px-3 py-1 text-xs font-bold text-black bg-white rounded">
               {currentMovie.media_type === 'tv' ? 'SERIE' : 'PELÍCULA'}
             </span>
             
-            {/* Clasificación de edad formato +edad */}
             {currentMovie.ageRating && (
               <span className="px-2 py-1 text-xs font-bold text-white bg-gray-600 rounded border border-gray-400">
                 {currentMovie.ageRating}
               </span>
             )}
             
-            {/* Información adicional */}
             {extraInfo && (
               <span className="px-3 py-1 text-xs font-bold text-white bg-red-600 rounded">
                 {extraInfo}
@@ -368,10 +376,33 @@ export default function HeroCarousel({
             )}
           </div>
 
-          {/* Título */}
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold text-white mb-4 leading-tight drop-shadow-lg">
-            {currentMovie.title || currentMovie.name}
-          </h1>
+          {/* Logo del título o texto fallback */}
+          <div className="mb-6 relative">
+            {hasLogo ? (
+              <div className="relative w-full max-w-lg">
+                <img
+                  src={`https://image.tmdb.org/t/p/w500${currentMovie.logo_path}`}
+                  alt={currentMovie.title || currentMovie.name || 'Title'}
+                  className={`w-full h-auto max-h-32 object-contain object-left transition-opacity duration-500 drop-shadow-lg ${
+                    logoLoaded ? 'opacity-100' : 'opacity-0'
+                  }`}
+                  onLoad={() => setLogoLoaded(true)}
+                  onError={() => setLogoLoaded(false)}
+                  style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.8))' }}
+                />
+                {/* Fallback si la imagen falla */}
+                {!logoLoaded && (
+                  <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold text-white leading-tight drop-shadow-lg">
+                    {currentMovie.title || currentMovie.name}
+                  </h1>
+                )}
+              </div>
+            ) : (
+              <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold text-white leading-tight drop-shadow-lg">
+                {currentMovie.title || currentMovie.name}
+              </h1>
+            )}
+          </div>
 
           {/* Overview */}
           <p className={`text-lg md:text-xl text-gray-200 mb-8 line-clamp-3 max-w-2xl drop-shadow-md transition-opacity duration-300 ${showTrailer ? 'opacity-0' : 'opacity-100'}`}>
