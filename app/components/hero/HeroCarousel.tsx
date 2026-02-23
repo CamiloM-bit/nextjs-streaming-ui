@@ -62,6 +62,7 @@ export default function HeroCarousel({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const [showTrailer, setShowTrailer] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
@@ -76,6 +77,7 @@ export default function HeroCarousel({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const currentMovie = movies[currentIndex];
+  const isActive = isHovered || isFocused; // Activo si hay hover O focus
 
   useEffect(() => {
     isMutedRef.current = isMuted;
@@ -146,6 +148,36 @@ export default function HeroCarousel({
       return formatRuntime(movie.runtime);
     }
   };
+
+  // Efecto para manejar trailer cuando está activo (hover o focus)
+  useEffect(() => {
+    if (isActive) {
+      setIsAutoPlaying(false);
+      
+      trailerTimeoutRef.current = setTimeout(() => {
+        const key = getTrailerKey(currentMovie);
+        if (key) {
+          setTrailerKey(key);
+          setShowTrailer(true);
+        }
+      }, trailerDelay);
+    } else {
+      setIsAutoPlaying(true);
+      setShowTrailer(false);
+      setTrailerKey(null);
+      setPlayerReady(false);
+      
+      if (trailerTimeoutRef.current) {
+        clearTimeout(trailerTimeoutRef.current);
+      }
+    }
+
+    return () => {
+      if (trailerTimeoutRef.current) {
+        clearTimeout(trailerTimeoutRef.current);
+      }
+    };
+  }, [isActive, currentMovie, getTrailerKey, trailerDelay]);
 
   useEffect(() => {
     if (showTrailer && trailerKey && playerContainerRef.current) {
@@ -240,8 +272,9 @@ export default function HeroCarousel({
     setLogoLoaded(false);
   };
 
+  // Auto-play del carrusel
   useEffect(() => {
-    if (isAutoPlaying && !isHovered) {
+    if (isAutoPlaying && !isActive) {
       autoPlayRef.current = setInterval(nextSlide, autoPlayInterval);
     }
     
@@ -250,36 +283,19 @@ export default function HeroCarousel({
         clearInterval(autoPlayRef.current);
       }
     };
-  }, [isAutoPlaying, isHovered, nextSlide, autoPlayInterval]);
+  }, [isAutoPlaying, isActive, nextSlide, autoPlayInterval]);
 
-  useEffect(() => {
-    if (isHovered) {
-      setIsAutoPlaying(false);
-      
-      trailerTimeoutRef.current = setTimeout(() => {
-        const key = getTrailerKey(currentMovie);
-        if (key) {
-          setTrailerKey(key);
-          setShowTrailer(true);
-        }
-      }, trailerDelay);
-    } else {
-      setIsAutoPlaying(true);
-      setShowTrailer(false);
-      setTrailerKey(null);
-      setPlayerReady(false);
-      
-      if (trailerTimeoutRef.current) {
-        clearTimeout(trailerTimeoutRef.current);
-      }
+  // Handlers para focus/blur en elementos del carrusel
+  const handleFocus = () => {
+    setIsFocused(true);
+  };
+
+  const handleBlur = (e: React.FocusEvent) => {
+    // Solo quitar el focus si el nuevo elemento enfocado NO está dentro del carrusel
+    if (!containerRef.current?.contains(e.relatedTarget as Node)) {
+      setIsFocused(false);
     }
-
-    return () => {
-      if (trailerTimeoutRef.current) {
-        clearTimeout(trailerTimeoutRef.current);
-      }
-    };
-  }, [isHovered, currentMovie, getTrailerKey, trailerDelay]);
+  };
 
   if (!movies || movies.length === 0) return null;
 
@@ -400,11 +416,13 @@ export default function HeroCarousel({
             {currentMovie.overview}
           </p>
 
-          {/* Botones */}
+          {/* Botones con handlers de focus/blur */}
           <div className="flex flex-wrap items-center gap-4">
             <button 
               tabIndex={0}
-              className="flex items-center gap-2 px-8 py-3 bg-white text-black font-bold rounded hover:bg-gray-200 transition-colors"
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+              className="flex items-center gap-2 px-8 py-3 bg-white text-black font-bold rounded hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black"
             >
               <Play className="w-5 h-5 fill-black" />
               Reproducir
@@ -412,7 +430,9 @@ export default function HeroCarousel({
             
             <button 
               tabIndex={0}
-              className="flex items-center gap-2 px-8 py-3 bg-gray-500/70 text-white font-bold rounded hover:bg-gray-500/50 transition-colors backdrop-blur-sm"
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+              className="flex items-center gap-2 px-8 py-3 bg-gray-500/70 text-white font-bold rounded hover:bg-gray-500/50 transition-colors backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black"
             >
               <Info className="w-5 h-5" />
               Más información
@@ -421,11 +441,13 @@ export default function HeroCarousel({
             {showTrailer && trailerKey && (
               <button
                 tabIndex={0}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
                 onClick={(e) => {
                   e.stopPropagation();
                   toggleMute();
                 }}
-                className="flex items-center gap-2 px-4 py-3 bg-black/50 text-white font-semibold rounded-full hover:bg-black/70 transition-all backdrop-blur-sm border border-white/20"
+                className="flex items-center gap-2 px-4 py-3 bg-black/50 text-white font-semibold rounded-full hover:bg-black/70 transition-all backdrop-blur-sm border border-white/20 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black"
               >
                 {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                 {isMuted ? 'Activar sonido' : 'Silenciar'}
@@ -433,20 +455,23 @@ export default function HeroCarousel({
             )}
           </div>
 
-          {isHovered && !showTrailer && getTrailerKey(currentMovie) && (
+          {isActive && !showTrailer && getTrailerKey(currentMovie) && (
             <div className="mt-6 flex items-center gap-2 text-white/70 text-sm">
               <div className="w-1 h-1 bg-white rounded-full animate-pulse" />
-              Mantén el cursor para ver el trailer en {trailerDelay / 1000}s...
+              {isFocused ? 'Focus activo - trailer en ' : 'Mantén el cursor para ver el trailer en '}
+              {trailerDelay / 1000}s...
             </div>
           )}
         </div>
       </div>
 
-      {/* Controles de navegación con tabIndex */}
+      {/* Controles de navegación con handlers de focus/blur */}
       <button
         tabIndex={0}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         onClick={prevSlide}
-        className="absolute left-4 top-1/2 -translate-y-1/2 z-40 p-3 bg-black/30 hover:bg-black/50 text-white rounded-full backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100"
+        className="absolute left-4 top-1/2 -translate-y-1/2 z-40 p-3 bg-black/30 hover:bg-black/50 text-white rounded-full backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black"
         aria-label="Anterior"
       >
         <ChevronLeft className="w-6 h-6" />
@@ -454,21 +479,25 @@ export default function HeroCarousel({
 
       <button
         tabIndex={0}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         onClick={nextSlide}
-        className="absolute right-4 top-1/2 -translate-y-1/2 z-40 p-3 bg-black/30 hover:bg-black/50 text-white rounded-full backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100"
+        className="absolute right-4 top-1/2 -translate-y-1/2 z-40 p-3 bg-black/30 hover:bg-black/50 text-white rounded-full backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black"
         aria-label="Siguiente"
       >
         <ChevronRight className="w-6 h-6" />
       </button>
 
-      {/* Dots indicadores con tabIndex */}
+      {/* Dots indicadores con handlers de focus/blur */}
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-40 flex gap-2">
         {movies.map((_, index) => (
           <button
             key={index}
             tabIndex={0}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
             onClick={() => goToSlide(index)}
-            className={`transition-all duration-300 rounded-full ${
+            className={`transition-all duration-300 rounded-full focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black ${
               index === currentIndex 
                 ? 'w-8 h-2 bg-white' 
                 : 'w-2 h-2 bg-white/50 hover:bg-white/80'
@@ -479,7 +508,7 @@ export default function HeroCarousel({
       </div>
 
       {/* Barra de progreso */}
-      {isAutoPlaying && !isHovered && (
+      {isAutoPlaying && !isActive && (
         <div className="absolute bottom-0 left-0 h-1 bg-red-600 z-50 transition-all ease-linear"
           style={{
             width: '100%',
