@@ -86,7 +86,7 @@ export default function KeyboardNavigation() {
           next = sameRow[0];
         }
       }
-
+ 
       if (e.key === "Enter") current.click();
       next?.focus();
     };
