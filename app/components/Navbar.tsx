@@ -122,7 +122,7 @@ export default function Navbar() {
       peer-focus:scale-100
       peer-focus:translate-y-5
       peer-focus:pointer-events-auto
-      
+       
       
     "
           >
