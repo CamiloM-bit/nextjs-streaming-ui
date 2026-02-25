@@ -517,7 +517,7 @@ export default function HeroCarouselNewPopular({
           
           {/* Badge New & Popular */}
           <div className="flex items-center gap-2 mb-2">
-            <span className="px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-black text-xs font-bold uppercase tracking-wider">
+            <span className="px-3 py-1 rounded-full bg-linear-to-r from-amber-500 to-orange-500 text-black text-xs font-bold uppercase tracking-wider">
               {isTV ? <Tv className="w-3 h-3 inline mr-1" /> : <Film className="w-3 h-3 inline mr-1" />}
               {isTV ? 'Serie' : 'Película'}
             </span>
