@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import HeroCarousel from "@/app/components/hero/HeroCarousel";
+import MediaLoader from "@/app/components/loaders/MediaLoader";
 
 export const metadata: Metadata = {
   title: "Home ",
@@ -163,7 +165,7 @@ function convertToAgeFormat(cert: string): string {
   return ageMap[cert] || cert;
 }
 
-export default async function Page() {
+async function HomeContent() {
   const movies = await getTrendingMovies();
   
   if (!movies || movies.length === 0) {
@@ -181,5 +183,13 @@ export default async function Page() {
      <div className="w-full h-auto">
           <HeroCarousel movies={movies} autoPlayInterval={8000} trailerDelay={5000} />
      </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<MediaLoader type="movies" />}>
+      <HomeContent />
+    </Suspense>
   );
 }
