@@ -52,7 +52,7 @@ interface Movie {
 
 async function getTrendingMovies(): Promise<Movie[]> {
   try {
-    if (!TMDB_API_KEY) {
+    if (!TMDB_API_KEY) { 
       console.error('TMDB_API_KEY no está configurada');
       return [];
     }
