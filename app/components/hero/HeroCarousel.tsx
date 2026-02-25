@@ -484,7 +484,7 @@ export default function HeroCarousel({
 
   return (
     <div 
-      className="relative w-full h-[85vh] min-h-[600px] overflow-hidden bg-black"
+      className="relative w-full h-[85vh] min-h-150 overflow-hidden bg-black"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -509,8 +509,8 @@ export default function HeroCarousel({
       )}
 
       {/* Gradient Overlays */}
-      <div className={`absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent transition-opacity duration-500 ${showTrailer ? 'opacity-60' : 'opacity-80'}`} />
-      <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/30" />
+      <div className={`absolute inset-0 bg-linear-to-r from-black via-black/60 to-transparent transition-opacity duration-500 ${showTrailer ? 'opacity-60' : 'opacity-80'}`} />
+      <div className="absolute inset-0 bg-linear-to-t from-black via-transparent to-black/30" />
 
       {/* Content */}
       <div className="absolute bottom-0 left-0 w-full pb-20 px-4 sm:px-6 lg:px-12 xl:px-16">
@@ -568,7 +568,7 @@ export default function HeroCarousel({
                   </button>
                   
                   {showAudioSelector && (
-                    <div className="absolute bottom-full left-0 mb-2 bg-black/90 backdrop-blur-md rounded-lg p-2 min-w-[140px] z-50 border border-white/10 shadow-xl">
+                    <div className="absolute bottom-full left-0 mb-2 bg-black/90 backdrop-blur-md rounded-lg p-2 min-w-35 z-50 border border-white/10 shadow-xl">
                       {availableAudios.map((audio, idx) => (
                         <button
                           key={audio.key}
