@@ -56,6 +56,9 @@ type AudioOption = {
 
 type QualityLevel = 'highres' | 'hd1080' | 'hd720' | 'large' | 'medium' | 'small' | 'tiny' | 'auto';
 
+// Cache global para logos precargados
+const logoCache = new Map<string, HTMLImageElement>();
+
 export default function HeroCarousel({
   movies,
   autoPlayInterval = 8000,
@@ -65,7 +68,7 @@ export default function HeroCarousel({
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
   const [showTrailer, setShowTrailer] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
   const [logoLoaded, setLogoLoaded] = useState(false);
@@ -75,7 +78,9 @@ export default function HeroCarousel({
   const [showAudioSelector, setShowAudioSelector] = useState(false);
   const [currentQuality, setCurrentQuality] = useState<QualityLevel>('highres');
   const [performanceIssues, setPerformanceIssues] = useState(0);
-  const [playerInstance, setPlayerInstance] = useState<number>(0); // Key para forzar recreación
+  const [playerInstance, setPlayerInstance] = useState<number>(0);
+  // Estado para el logo precargado del siguiente
+  const [preloadedLogos, setPreloadedLogos] = useState<Set<string>>(new Set());
 
   const autoPlayRef = useRef<NodeJS.Timeout | null>(null);
   const trailerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -90,16 +95,70 @@ export default function HeroCarousel({
 
   useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
 
-  useEffect(() => { 
-    setLogoLoaded(false); 
-    setLogoError(false);
+  // Precargar logos de todas las películas al inicio y de los adyacentes
+  useEffect(() => {
+    const preloadLogo = (movie: Movie) => {
+      if (!movie.logo_path || logoCache.has(movie.logo_path)) return;
+      
+      const img = new Image();
+      const logoUrl = `https://image.tmdb.org/t/p/original${movie.logo_path}`;
+      
+      img.onload = () => {
+        logoCache.set(movie.logo_path!, img);
+        setPreloadedLogos(prev => new Set(prev).add(movie.logo_path!));
+      };
+      
+      img.onerror = () => {
+        console.log(`Error precargando logo: ${movie.title || movie.name}`);
+      };
+      
+      img.src = logoUrl;
+    };
+
+    // Precargar todas las películas al inicio
+    movies.forEach(preloadLogo);
+  }, [movies]);
+
+  // Precargar el logo del siguiente cuando cambia el índice
+  useEffect(() => {
+    const nextIndex = (currentIndex + 1) % movies.length;
+    const prevIndex = (currentIndex - 1 + movies.length) % movies.length;
+    
+    // Precargar siguiente y anterior
+    if (movies[nextIndex]) preloadLogo(movies[nextIndex]);
+    if (movies[prevIndex]) preloadLogo(movies[prevIndex]);
+    
+    // Verificar si el logo actual ya está en caché
+    if (currentMovie?.logo_path && logoCache.has(currentMovie.logo_path)) {
+      setLogoLoaded(true);
+      setLogoError(false);
+    } else {
+      setLogoLoaded(false);
+      setLogoError(false);
+    }
+    
     setAvailableAudios([]);
     setSelectedAudio(0);
     setShowAudioSelector(false);
     setCurrentQuality('highres');
     setPerformanceIssues(0);
     stallCount.current = 0;
-  }, [currentIndex]);
+  }, [currentIndex, movies, currentMovie]);
+
+  // Función auxiliar para precargar (definida dentro del componente para acceder a movies)
+  const preloadLogo = useCallback((movie: Movie) => {
+    if (!movie.logo_path || logoCache.has(movie.logo_path)) return;
+    
+    const img = new Image();
+    const logoUrl = `https://image.tmdb.org/t/p/original${movie.logo_path}`;
+    
+    img.onload = () => {
+      logoCache.set(movie.logo_path!, img);
+      setPreloadedLogos(prev => new Set(prev).add(movie.logo_path!));
+    };
+    
+    img.src = logoUrl;
+  }, []);
 
   useEffect(() => {
     if (!window.YT && !document.getElementById('youtube-api')) {
@@ -110,7 +169,6 @@ export default function HeroCarousel({
     }
   }, []);
 
-  // Detectar problemas de rendimiento y ajustar calidad
   const checkPerformance = useCallback(() => {
     if (!playerRef.current || !playerReady) return;
 
@@ -146,9 +204,7 @@ export default function HeroCarousel({
         
         lastPlaybackTime.current = currentTime;
       }
-    } catch (e) {
-      // Ignorar errores de API
-    }
+    } catch (e) {}
   }, [playerReady, currentQuality]);
 
   useEffect(() => {
@@ -254,7 +310,7 @@ export default function HeroCarousel({
           setCurrentQuality('highres');
           setPerformanceIssues(0);
           stallCount.current = 0;
-          setPlayerInstance(prev => prev + 1); // Forzar recreación del player
+          setPlayerInstance(prev => prev + 1);
         }
       }, trailerDelay);
     } else {
@@ -270,15 +326,11 @@ export default function HeroCarousel({
     return () => { if (trailerTimeoutRef.current) clearTimeout(trailerTimeoutRef.current); };
   }, [isActive, currentMovie, organizeVideosByLanguage, trailerDelay]);
 
-  // Cambiar audio - CORREGIDO: Ahora funciona correctamente
   const changeAudio = useCallback((index: number) => {
-    // Destruir player anterior
     if (playerRef.current) {
       try { 
         playerRef.current.destroy(); 
-      } catch(e) {
-        console.log('Error destruyendo player:', e);
-      }
+      } catch(e) {}
       playerRef.current = null;
     }
     
@@ -287,21 +339,18 @@ export default function HeroCarousel({
     setTrailerKey(availableAudios[index].key);
     setPerformanceIssues(0);
     stallCount.current = 0;
-    setPlayerInstance(prev => prev + 1); // Forzar recreación con nueva key
+    setPlayerInstance(prev => prev + 1);
     
-    // Pequeño delay para asegurar que el DOM se actualice
     setTimeout(() => {
       setShowTrailer(true);
     }, 50);
   }, [availableAudios]);
 
-  // YouTube Player - Se recrea cuando cambia trailerKey o playerInstance
   useEffect(() => {
     if (!showTrailer || !trailerKey || !playerContainerRef.current || !window.YT?.Player) {
       return;
     }
 
-    // Limpiar contenedor antes de crear nuevo player
     if (playerContainerRef.current) {
       playerContainerRef.current.innerHTML = '';
     }
@@ -310,7 +359,7 @@ export default function HeroCarousel({
       videoId: trailerKey,
       playerVars: {
         autoplay: 1,
-        mute: 1,
+        mute: isMutedRef.current ? 1 : 0,
         controls: 0,
         start: 0,
         rel: 0,
@@ -333,19 +382,20 @@ export default function HeroCarousel({
           try {
             event.target.setPlaybackQuality('highres');
             const availableQualities = event.target.getAvailableQualityLevels?.() || [];
-            console.log('Calidades disponibles:', availableQualities);
             
             if (!availableQualities.includes('highres') && availableQualities.length > 0) {
               const bestQuality = availableQualities[0];
               event.target.setPlaybackQuality(bestQuality);
               setCurrentQuality(bestQuality);
             }
-          } catch (e) {
-            console.log('No se pudo establecer calidad:', e);
-          }
+          } catch (e) {}
           
           event.target.playVideo();
-          if (!isMutedRef.current) event.target.unMute();
+          if (isMutedRef.current) {
+            event.target.mute();
+          } else {
+            event.target.unMute();
+          }
         },
         onStateChange: (event: any) => {
           if (event.data === window.YT.PlayerState.ENDED) {
@@ -358,12 +408,10 @@ export default function HeroCarousel({
             if (stallCount.current > 5 && currentQuality === 'highres') {
               setCurrentQuality('hd1080');
               event.target.setPlaybackQuality?.('hd1080');
-              console.log('Reduciendo a 1080p por buffering');
             }
           }
         },
         onPlaybackQualityChange: (event: any) => {
-          console.log('Calidad cambiada a:', event.data);
           setCurrentQuality(event.data);
         },
         onError: (event: any) => {
@@ -376,9 +424,7 @@ export default function HeroCarousel({
       if (playerRef.current) { 
         try { 
           playerRef.current.destroy(); 
-        } catch(e) {
-          console.log('Error limpiando player:', e);
-        }
+        } catch(e) {}
         playerRef.current = null; 
         setPlayerReady(false); 
       } 
@@ -398,12 +444,15 @@ export default function HeroCarousel({
   }, [isAutoPlaying, isActive, movies.length, autoPlayInterval]);
 
   const toggleMute = useCallback(() => {
+    const newState = !isMuted;
+    setIsMuted(newState);
+    
     if (playerRef.current && playerReady) {
-      const newState = !isMuted;
-      setIsMuted(newState);
-      newState ? playerRef.current.mute() : playerRef.current.unMute();
-    } else {
-      setIsMuted(!isMuted);
+      if (newState) {
+        playerRef.current.mute();
+      } else {
+        playerRef.current.unMute();
+      }
     }
   }, [playerReady, isMuted]);
 
@@ -429,6 +478,9 @@ export default function HeroCarousel({
   
   const matchPercent = getMatchPercent(currentMovie.vote_average);
   const genres = currentMovie.genres?.slice(0, 3) || [];
+
+  // Verificar si el logo está precargado
+  const isLogoPreloaded = currentMovie?.logo_path && logoCache.has(currentMovie.logo_path);
 
   return (
     <div 
@@ -464,13 +516,15 @@ export default function HeroCarousel({
       <div className="absolute bottom-0 left-0 w-full pb-20 px-4 sm:px-6 lg:px-12 xl:px-16">
         <div className="max-w-2xl space-y-6">
           
-          {/* Logo */}
+          {/* Logo - Con precarga instantánea */}
           <div className="relative h-32 md:h-40 w-full max-w-lg">
             {logoUrl && !logoError ? (
               <img 
                 src={logoUrl} 
                 alt={currentMovie.title || currentMovie.name}
-                className={`h-full w-auto object-contain object-left transition-all duration-500 ${logoLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
+                className={`h-full w-auto object-contain object-left transition-all duration-300 ${
+                  isLogoPreloaded || logoLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+                }`}
                 style={{ 
                   filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.9))',
                   maxWidth: '100%'
