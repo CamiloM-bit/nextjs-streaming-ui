@@ -51,10 +51,9 @@ type AudioOption = {
 
 type QualityLevel = 'highres' | 'hd1080' | 'hd720' | 'large' | 'medium' | 'small' | 'tiny' | 'auto';
 
-// Cache global para logos precargados
 const logoCache = new Map<string, HTMLImageElement>();
 
-export default function HeroCarousel({
+export default function HeroCarouselMovies({
   movies,
   autoPlayInterval = 8000,
   trailerDelay = 2000
@@ -74,7 +73,6 @@ export default function HeroCarousel({
   const [currentQuality, setCurrentQuality] = useState<QualityLevel>('highres');
   const [performanceIssues, setPerformanceIssues] = useState(0);
   const [playerInstance, setPlayerInstance] = useState(0);
-  // Estado para el logo precargado del siguiente
   const [preloadedLogos, setPreloadedLogos] = useState<Set<string>>(new Set());
 
   const autoPlayRef = useRef<NodeJS.Timeout | null>(null);
@@ -90,7 +88,6 @@ export default function HeroCarousel({
 
   useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
 
-  // Precargar logos de todas las películas al inicio y de los adyacentes
   useEffect(() => {
     const preloadLogo = (movie: Movie) => {
       if (!movie.logo_path || logoCache.has(movie.logo_path)) return;
@@ -110,20 +107,16 @@ export default function HeroCarousel({
       img.src = logoUrl;
     };
 
-    // Precargar todas las películas al inicio
     movies.forEach(preloadLogo);
   }, [movies]);
 
-  // Precargar el logo del siguiente cuando cambia el índice
   useEffect(() => {
     const nextIndex = (currentIndex + 1) % movies.length;
     const prevIndex = (currentIndex - 1 + movies.length) % movies.length;
     
-    // Precargar siguiente y anterior
     if (movies[nextIndex]) preloadLogo(movies[nextIndex]);
     if (movies[prevIndex]) preloadLogo(movies[prevIndex]);
     
-    // Verificar si el logo actual ya está en caché
     if (currentMovie?.logo_path && logoCache.has(currentMovie.logo_path)) {
       setLogoLoaded(true);
       setLogoError(false);
@@ -140,7 +133,6 @@ export default function HeroCarousel({
     stallCount.current = 0;
   }, [currentIndex, movies, currentMovie]);
 
-  // Función auxiliar para precargar (definida dentro del componente para acceder a movies)
   const preloadLogo = useCallback((movie: Movie) => {
     if (!movie.logo_path || logoCache.has(movie.logo_path)) return;
     
@@ -455,13 +447,9 @@ export default function HeroCarousel({
   const logoUrl = currentMovie.logo_path ? `https://image.tmdb.org/t/p/original${currentMovie.logo_path}` : null;
   
   const year = currentMovie.release_date ? new Date(currentMovie.release_date).getFullYear() : '';
-  
   const duration = formatRuntime(currentMovie.runtime);
-  
   const matchPercent = getMatchPercent(currentMovie.vote_average);
   const genres = currentMovie.genres?.slice(0, 3) || [];
-
-  // Verificar si el logo está precargado
   const isLogoPreloaded = currentMovie?.logo_path && logoCache.has(currentMovie.logo_path);
 
   return (
@@ -470,7 +458,6 @@ export default function HeroCarousel({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Background Image */}
       <div className="absolute inset-0">
         <img 
           src={backdropUrl} 
@@ -479,7 +466,6 @@ export default function HeroCarousel({
         />
       </div>
 
-      {/* YouTube Trailer */}
       {showTrailer && trailerKey && (
         <div className="absolute inset-0 w-full h-full" key={`player-${playerInstance}`}>
           <div 
@@ -490,15 +476,12 @@ export default function HeroCarousel({
         </div>
       )}
 
-      {/* Gradient Overlays */}
       <div className={`absolute inset-0 bg-linear-to-r from-black via-black/60 to-transparent transition-opacity duration-500 ${showTrailer ? 'opacity-60' : 'opacity-80'}`} />
       <div className="absolute inset-0 bg-linear-to-t from-black via-transparent to-black/30" />
 
-      {/* Content */}
       <div className="absolute bottom-0 left-0 w-full pb-20 px-4 sm:px-6 lg:px-12 xl:px-16">
         <div className="max-w-2xl space-y-6">
           
-          {/* Logo - Con precarga instantánea */}
           <div className="relative h-32 md:h-40 w-full max-w-lg">
             {logoUrl && !logoError ? (
               <img 
@@ -521,7 +504,6 @@ export default function HeroCarousel({
             )}
           </div>
 
-          {/* Metadata */}
           <div className="flex items-center gap-3 text-sm md:text-base text-gray-200 flex-wrap">
             <span className="text-green-400 font-semibold">{matchPercent} de coincidencia</span>
             <span className="text-gray-400">•</span>
@@ -533,7 +515,6 @@ export default function HeroCarousel({
             <span className="text-gray-400">•</span>
             <span className="text-yellow-500 font-bold">IMDb {currentMovie.vote_average.toFixed(1)}</span>
             
-            {/* Selector de Audio */}
             {showTrailer && availableAudios.length > 1 && (
               <>
                 <span className="text-gray-400">•</span>
@@ -582,12 +563,10 @@ export default function HeroCarousel({
             )}
           </div>
 
-          {/* Overview */}
           <p className="text-gray-200 text-base md:text-lg line-clamp-3 max-w-xl leading-relaxed">
             {currentMovie.overview}
           </p>
 
-          {/* Genres */}
           <div className="flex items-center gap-2 text-sm text-gray-400">
             {genres.map((genre, index) => (
               <React.Fragment key={genre.id}>
@@ -597,7 +576,6 @@ export default function HeroCarousel({
             ))}
           </div>
 
-          {/* Buttons */}
           <div className="flex items-center gap-3 pt-2">
             <a 
               href={`https://www.themoviedb.org/movie/${currentMovie.id}`}
@@ -625,7 +603,6 @@ export default function HeroCarousel({
           </div>
         </div>
 
-        {/* Right side controls */}
         <div className="absolute right-4 sm:right-6 lg:right-12 bottom-20 flex items-center gap-3">
           {showTrailer && (
             <button 
@@ -645,7 +622,6 @@ export default function HeroCarousel({
         </div>
       </div>
 
-      {/* Carousel indicators */}
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-2">
         {movies.map((_, index) => (
           <button
