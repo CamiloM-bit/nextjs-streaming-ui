@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Play, Plus, Volume2, VolumeX, ChevronRight, Download } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -57,12 +58,12 @@ interface HeroCarouselProps {
   trailerDelay?: number;
 }
 
-export default function HeroCarousel({ 
-  movies, 
-  autoPlayInterval = 8000, 
-  trailerDelay = 5000 
+export default function HeroCarousel({
+  movies,
+  autoPlayInterval = 8000,
+  trailerDelay = 5000
 }: HeroCarouselProps) {
-  
+
   // Estados
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
@@ -73,6 +74,7 @@ export default function HeroCarousel({
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
   const [logoLoaded, setLogoLoaded] = useState(false);
+  const [showDownloadMsg, setShowDownloadMsg] = useState(false);
 
   // Refs
   const autoPlayRef = useRef<NodeJS.Timeout | null>(null);
@@ -105,8 +107,8 @@ export default function HeroCarousel({
   const getTrailerKey = useCallback((movie: Movie): string | null => {
     if (!movie.videos?.results?.length) return null;
     return movie.videos.results.find((v) => v.type === 'Trailer' && v.official && v.site === 'YouTube')?.key ||
-           movie.videos.results.find((v) => v.type === 'Trailer' && v.site === 'YouTube')?.key ||
-           movie.videos.results.find((v) => v.site === 'YouTube')?.key || null;
+      movie.videos.results.find((v) => v.type === 'Trailer' && v.site === 'YouTube')?.key ||
+      movie.videos.results.find((v) => v.site === 'YouTube')?.key || null;
   }, []);
 
   // Formatear duración
@@ -219,10 +221,10 @@ export default function HeroCarousel({
     setShowTrailer(false); setTrailerKey(null); setPlayerReady(false); setLogoLoaded(false);
   }, [movies.length]);
 
-  const prevSlide = useCallback(() => {
-    setCurrentIndex((p) => (p - 1 + movies.length) % movies.length);
-    setShowTrailer(false); setTrailerKey(null); setPlayerReady(false); setLogoLoaded(false);
-  }, [movies.length]);
+  const handleDownload = () => {
+    setShowDownloadMsg(true);
+    setTimeout(() => setShowDownloadMsg(false), 8000);
+  };
 
   // Focus handlers
   const handleFocus = () => setIsFocused(true);
@@ -232,55 +234,203 @@ export default function HeroCarousel({
 
   if (!movies?.length) return null;
 
-  // ============================================================
-  // NOTAS PARA IMPLEMENTACIÓN:
-  // 
-  // VARIABLES DISPONIBLES:
-  // 
-  // currentMovie -> Objeto completo de la película/serie actual
-  // currentMovie.title / currentMovie.name -> Título
-  // currentMovie.overview -> Descripción
-  // currentMovie.backdrop_path -> Ruta imagen fondo (usar con https://image.tmdb.org/t/p/original)
-  // currentMovie.poster_path -> Ruta poster
-  // currentMovie.vote_average -> Rating (0-10)
-  // currentMovie.media_type -> 'movie' o 'tv'
-  // currentMovie.runtime -> Duración en minutos (películas)
-  // currentMovie.number_of_seasons -> Número temporadas (series)
-  // currentMovie.number_of_episodes -> Número episodios (series)
-  // currentMovie.ageRating -> Clasificación edad formato "+16"
-  // currentMovie.logo_path -> Ruta logo título (usar con https://image.tmdb.org/t/p/w500)
-  // currentMovie.genres -> Array de géneros [{id, name}]
-  // currentMovie.videos -> Objecto con trailers
-  // 
-  // ESTADOS:
-  // showTrailer -> boolean (true cuando el trailer está reproduciéndose)
-  // isMuted -> boolean (estado del audio)
-  // currentIndex -> número (slide actual)
-  // movies.length -> total de slides
-  // logoLoaded -> boolean (si el logo ya cargó)
-  // 
-  // REFS (NO ELIMINAR):
-  // containerRef -> ref del contenedor principal
-  // playerContainerRef -> ref donde se inyecta el iframe de YouTube
-  // 
-  // HANDLERS (usar en eventos onClick/onFocus/onBlur):
-  // goToSlide(index) -> cambiar a slide específico
-  // nextSlide() -> siguiente slide
-  // prevSlide() -> anterior slide
-  // toggleMute() -> silenciar/activar audio
-  // handleFocus() -> cuando un elemento recibe foco
-  // handleBlur(e) -> cuando un elemento pierde foco
-  // 
-  // EVENTOS DEL CONTENEDOR PRINCIPAL:
-  // onMouseEnter={() => setIsHovered(true)}
-  // onMouseLeave={() => setIsHovered(false)}
-  // ============================================================
+  // URL del backdrop
+  const backdropUrl = `https://image.tmdb.org/t/p/original${currentMovie.backdrop_path}`;
+  
+  // URL del logo
+  const logoUrl = currentMovie.logo_path ? `https://image.tmdb.org/t/p/w500${currentMovie.logo_path}` : null;
+  
+  // Año
+  const year = currentMovie.media_type === 'tv' 
+    ? (currentMovie.first_air_date ? new Date(currentMovie.first_air_date).getFullYear() : '')
+    : (currentMovie.release_date ? new Date(currentMovie.release_date).getFullYear() : '');
+  
+  // Info de duración o temporadas
+  const durationOrSeasons = currentMovie.media_type === 'tv' 
+    ? getSeriesInfo(currentMovie) 
+    : formatRuntime(currentMovie.runtime);
+  
+  // Match %
+  const matchPercent = getMatchPercent(currentMovie.vote_average);
+
+  // Géneros
+  const genres = currentMovie.genres || [];
 
   return (
     <>
-    <div className='bg-blue-600'>
-      
-    </div>
+      {/* Mensaje de descarga */}
+      {showDownloadMsg && (
+        <div className="fixed top-4 right-4 z-50 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3">
+          <span>Descargando...</span>
+          <button onClick={() => setShowDownloadMsg(false)} className="text-white hover:text-gray-200">×</button>
+        </div>
+      )}
+
+      {/* contenedor principal */}
+      <div 
+        ref={containerRef}
+        className='relative h-152 w-full border-yellow-500'
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+
+        {/* Contenedor banner de la pelicula e serie */}
+        <div className='z-5 border-blue-500 absolute w-full h-full'>
+          {/* Imagen de fondo de la API */}
+          <img 
+            src={backdropUrl} 
+            alt=""
+            className="border-red-500 object-cover h-full w-full"
+          />
+        </div>
+
+        {/* Trailer de YouTube (encima de la imagen, debajo del gradiente) */}
+        {showTrailer && trailerKey && (
+          <div className='z-6 absolute w-full h-full'>
+            <div ref={playerContainerRef} className="w-full h-full" />
+          </div>
+        )}
+
+        {/* Overline fondo gradiente - opacidad cambia cuando hay trailer */}
+        <div className={`z-7 absolute w-full h-full inset-0 bg-linear-to-r from-black via-[#000000e7] to-transparent transition-opacity duration-500 ${showTrailer ? 'opacity-70' : 'opacity-100'}`} />
+
+        <div className='absolute left-[3%] flex flex-col bottom-0 gap-5 z-8 border-red-500 w-[97%] h-[75%] '>
+
+          {/* Logo container - Logo del título de la API */}
+          <div className='border-blue-500 h-40 w-116'>
+            {logoUrl ? (
+              <img 
+                src={logoUrl} 
+                alt="" 
+                className='h-full object-contain'
+                onLoad={() => setLogoLoaded(true)}
+                style={{ opacity: logoLoaded ? 1 : 0, transition: 'opacity 0.5s' }}
+              />
+            ) : (
+              <h1 className='text-white text-4xl font-bold'>{currentMovie.title || currentMovie.name}</h1>
+            )}
+          </div>
+
+          {/* Datos: IMDb, año, duración/temporadas, match */}
+          <div className='border-red-500 flex gap-1.5 items-center w-120 text-white'>
+            <div className='flex items-center gap-1'>
+              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/IMDB_Logo_2016.svg/960px-IMDB_Logo_2016.svg.png" alt="" className='w-10' />
+              <p>{currentMovie.vote_average.toFixed(1)}</p>
+            </div>
+            <p>·</p>
+            <p>{year}</p>
+            <p>·</p>
+            <p>{durationOrSeasons}</p>
+            <p>·</p>
+            <p className='text-green-500 font-semibold'>{matchPercent} match</p>
+          </div>
+
+          {/* Sinopsis - truncada a 3 líneas */}
+          <div className='border-blue-500 w-132'>
+            <p className='text-white line-clamp-3'>
+              {currentMovie.overview}
+              {currentMovie.overview && currentMovie.overview.length > 150 && (
+                <a 
+                  href={`https://www.themoviedb.org/${currentMovie.media_type}/${currentMovie.id}`} 
+                  target='_blank' 
+                  rel="noopener noreferrer"
+                  className='text-blue-400 hover:text-blue-300 ml-1'
+                >
+                  ...
+                </a>
+              )}
+            </p>
+          </div>
+
+          {/* Botones */}
+          <div className='flex flex-1 items-center gap-2.5 w-full border-red-400 relative top-3.5 mb-0'>
+
+            {/* Botón descargar - abre mensaje */}
+            <button 
+              onClick={handleDownload}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+              className='bg-[#3b3a3a80] cursor-pointer focus:border border-yellow-500 p-3 w-13.5 h-13.5 rounded-full focus:border-red-500 flex items-center justify-center'
+            >
+              <Download className="w-6 h-6 text-white" />
+            </button>
+
+            {/* Watch now - link a TMDB */}
+            <a 
+              href={`https://www.themoviedb.org/${currentMovie.media_type}/${currentMovie.id}`}
+              target='_blank'
+              rel="noopener noreferrer"
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+            >
+              <button className='bg-[#ffffff] w-40 flex items-center gap-1.5 pl-6 pr-7 cursor-pointer focus:border text-black border-yellow-500 p-3 h-13.5 rounded-full focus:border-red-500'>
+                <span className='border-red-500 w-2.5'>
+                  <Play className="w-5 h-5 fill-black" />
+                </span>
+                Watch now
+              </button>
+            </a>
+
+            {/* Agregar a lista */}
+            <button 
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+              className='bg-[#3b3a3a80] cursor-pointer focus:border border-yellow-500 p-3 w-13.5 h-13.5 rounded-full focus:border-red-500 flex items-center justify-center text-white text-2xl'
+            >
+              <Plus className="w-6 h-6" />
+            </button>
+
+            {/* Siguiente slide */}
+            <button 
+              onClick={nextSlide}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+              className='bg-[#3b3a3a80] cursor-pointer focus:border border-yellow-500 p-3 w-13.5 h-13.5 rounded-full focus:border-red-500 flex items-center justify-center'
+            >
+              <ChevronRight className="w-6 h-6 text-white" />
+            </button>
+
+            {/* Clasificación de edad y mute - derecha */}
+            <div className='gap-2 h-full font-semibold flex items-center absolute border-red-500 w-40 z-9 bg-red bottom-0 right-0'>
+
+              {/* Botón mute */}
+              <button 
+                onClick={toggleMute}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
+                className='bg-[#3b3a3aab] cursor-pointer focus:border border-yellow-500 p-3 w-13.5 h-13.5 rounded-full focus:border-red-500 flex items-center justify-center'
+              >
+                {isMuted ? <VolumeX className="w-6 h-6 text-white" /> : <Volume2 className="w-6 h-6 text-white" />}
+              </button>
+
+              {/* Clasificación de edad */}
+              <div className='bg-[#3b3a3aab] border-red-500 flex-1 h-full relative flex items-center pl-2'>
+                <p className='text-white'>{currentMovie.ageRating || '13+'}</p>
+              </div>
+
+            </div>
+          </div>
+
+          {/* Categorías/Géneros */}
+          <div className='flex gap-2.5 text-gray-400 relative items-center h-16 bottom-0'>
+            {genres.map((genre, index) => (
+              <React.Fragment key={genre.id}>
+                <a 
+                  href={`https://www.themoviedb.org/genre/${genre.id}`}
+                  target='_blank'
+                  rel="noopener noreferrer"
+                  className='hover:text-white transition-colors'
+                >
+                  {genre.name}
+                </a>
+                {index < genres.length - 1 && <span>·</span>}
+              </React.Fragment>
+            ))}
+          </div>
+
+        </div>
+
+      </div>
     </>
   );
 }

@@ -23,7 +23,7 @@ export default function Navbar() {
   }, [pathname])
 
   return (<>
-    <header className="flex items-center  border-orange-800  fixed pl-7  h-[12%] w-full" >
+    <header className="flex items-center  border-orange-800  fixed pl-7  h-[12%] w-full z-10 " >
       <div className=" border-red-800  flex-1 h-full">
         <div className=" border-orange-500 h-full w-[50%] content-center"> {/* Logo Container */}
           <div>
