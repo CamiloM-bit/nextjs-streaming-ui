@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Play, Plus, Volume2, VolumeX, ChevronRight, Info, Globe } from 'lucide-react';
+import { Play, Plus, Volume2, VolumeX, ChevronRight, Info, Globe, ChevronDown } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -54,6 +54,8 @@ type AudioOption = {
   label: string;
 };
 
+type QualityLevel = 'highres' | 'hd1080' | 'hd720' | 'large' | 'medium' | 'small' | 'tiny' | 'auto';
+
 export default function HeroCarousel({
   movies,
   autoPlayInterval = 8000,
@@ -71,12 +73,17 @@ export default function HeroCarousel({
   const [availableAudios, setAvailableAudios] = useState<AudioOption[]>([]);
   const [selectedAudio, setSelectedAudio] = useState<number>(0);
   const [showAudioSelector, setShowAudioSelector] = useState(false);
+  const [currentQuality, setCurrentQuality] = useState<QualityLevel>('highres');
+  const [performanceIssues, setPerformanceIssues] = useState(0);
+  const [playerInstance, setPlayerInstance] = useState<number>(0); // Key para forzar recreación
 
   const autoPlayRef = useRef<NodeJS.Timeout | null>(null);
   const trailerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const playerRef = useRef<any>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const isMutedRef = useRef(isMuted);
+  const lastPlaybackTime = useRef<number>(0);
+  const stallCount = useRef<number>(0);
 
   const currentMovie = movies[currentIndex];
   const isActive = isHovered;
@@ -88,7 +95,10 @@ export default function HeroCarousel({
     setLogoError(false);
     setAvailableAudios([]);
     setSelectedAudio(0);
-    setShowAudioSelector(false); // Asegurar que inicie cerrado
+    setShowAudioSelector(false);
+    setCurrentQuality('highres');
+    setPerformanceIssues(0);
+    stallCount.current = 0;
   }, [currentIndex]);
 
   useEffect(() => {
@@ -100,7 +110,54 @@ export default function HeroCarousel({
     }
   }, []);
 
-  // Organizar videos por idioma
+  // Detectar problemas de rendimiento y ajustar calidad
+  const checkPerformance = useCallback(() => {
+    if (!playerRef.current || !playerReady) return;
+
+    try {
+      const currentTime = playerRef.current.getCurrentTime?.() || 0;
+      const playerState = playerRef.current.getPlayerState?.();
+      
+      if (playerState === window.YT?.PlayerState?.PLAYING) {
+        if (Math.abs(currentTime - lastPlaybackTime.current) < 0.1) {
+          stallCount.current++;
+          
+          if (stallCount.current > 3) {
+            setPerformanceIssues(prev => {
+              const newIssues = prev + 1;
+              
+              if (newIssues > 2 && currentQuality === 'highres') {
+                setCurrentQuality('hd1080');
+                playerRef.current?.setPlaybackQuality?.('hd1080');
+                console.log('Reduciendo calidad a 1080p por problemas de rendimiento');
+              } else if (newIssues > 4 && currentQuality === 'hd1080') {
+                setCurrentQuality('hd720');
+                playerRef.current?.setPlaybackQuality?.('hd720');
+                console.log('Reduciendo calidad a 720p por problemas de rendimiento');
+              }
+              
+              return newIssues;
+            });
+            stallCount.current = 0;
+          }
+        } else {
+          stallCount.current = Math.max(0, stallCount.current - 1);
+        }
+        
+        lastPlaybackTime.current = currentTime;
+      }
+    } catch (e) {
+      // Ignorar errores de API
+    }
+  }, [playerReady, currentQuality]);
+
+  useEffect(() => {
+    if (!showTrailer || !playerReady) return;
+    
+    const interval = setInterval(checkPerformance, 2000);
+    return () => clearInterval(interval);
+  }, [showTrailer, playerReady, checkPerformance]);
+
   const organizeVideosByLanguage = useCallback((movie: Movie): AudioOption[] => {
     if (!movie.videos?.results?.length) return [];
 
@@ -108,7 +165,6 @@ export default function HeroCarousel({
     const options: AudioOption[] = [];
     const usedKeys = new Set();
 
-    // Prioridad 1: Latino (detectar por nombre o código)
     videos.forEach(v => {
       const name = v.name?.toLowerCase() || '';
       const isLatino = name.includes('latino') || name.includes('latin') || name.includes('mexicano');
@@ -125,7 +181,6 @@ export default function HeroCarousel({
       }
     });
 
-    // Prioridad 2: Inglés
     videos.forEach(v => {
       if (v.iso_639_1 === 'en' && !usedKeys.has(v.key)) {
         options.push({
@@ -138,7 +193,6 @@ export default function HeroCarousel({
       }
     });
 
-    // Prioridad 3: Español (España)
     videos.forEach(v => {
       if (v.iso_639_1 === 'es' && !usedKeys.has(v.key)) {
         options.push({
@@ -151,7 +205,6 @@ export default function HeroCarousel({
       }
     });
 
-    // Prioridad 4: Cualquier otro
     videos.forEach(v => {
       if (!usedKeys.has(v.key)) {
         options.push({
@@ -188,7 +241,6 @@ export default function HeroCarousel({
     return `${match}%`;
   }, []);
 
-  // Trailer logic
   useEffect(() => {
     if (isActive) {
       setIsAutoPlaying(false);
@@ -198,8 +250,11 @@ export default function HeroCarousel({
           setAvailableAudios(audios);
           setTrailerKey(audios[0].key);
           setShowTrailer(true);
-          // IMPORTANTE: No abrir el selector automáticamente
           setShowAudioSelector(false);
+          setCurrentQuality('highres');
+          setPerformanceIssues(0);
+          stallCount.current = 0;
+          setPlayerInstance(prev => prev + 1); // Forzar recreación del player
         }
       }, trailerDelay);
     } else {
@@ -208,74 +263,135 @@ export default function HeroCarousel({
       setTrailerKey(null);
       setPlayerReady(false);
       setAvailableAudios([]);
-      setShowAudioSelector(false); // Cerrar al salir
+      setShowAudioSelector(false);
+      setCurrentQuality('highres');
       if (trailerTimeoutRef.current) clearTimeout(trailerTimeoutRef.current);
     }
     return () => { if (trailerTimeoutRef.current) clearTimeout(trailerTimeoutRef.current); };
   }, [isActive, currentMovie, organizeVideosByLanguage, trailerDelay]);
 
-  // Cambiar audio
+  // Cambiar audio - CORREGIDO: Ahora funciona correctamente
   const changeAudio = useCallback((index: number) => {
+    // Destruir player anterior
     if (playerRef.current) {
-      try { playerRef.current.destroy(); } catch(e) {}
+      try { 
+        playerRef.current.destroy(); 
+      } catch(e) {
+        console.log('Error destruyendo player:', e);
+      }
+      playerRef.current = null;
     }
+    
+    setPlayerReady(false);
     setSelectedAudio(index);
     setTrailerKey(availableAudios[index].key);
-    setPlayerReady(false);
+    setPerformanceIssues(0);
+    stallCount.current = 0;
+    setPlayerInstance(prev => prev + 1); // Forzar recreación con nueva key
+    
+    // Pequeño delay para asegurar que el DOM se actualice
+    setTimeout(() => {
+      setShowTrailer(true);
+    }, 50);
   }, [availableAudios]);
 
-  // YouTube Player
+  // YouTube Player - Se recrea cuando cambia trailerKey o playerInstance
   useEffect(() => {
-    if (showTrailer && trailerKey && playerContainerRef.current && window.YT?.Player) {
-      playerRef.current = new window.YT.Player(playerContainerRef.current, {
-        videoId: trailerKey,
-        playerVars: {
-          autoplay: 1,
-          mute: 1,
-          controls: 0,
-          start: 0,
-          rel: 0,
-          modestbranding: 1,
-          playsinline: 1,
-          enablejsapi: 1,
-          iv_load_policy: 3,
-          fs: 0,
-          cc_load_policy: 0,
-          hl: 'es-419',
-          autohide: 1,
-          disablekb: 1,
-          origin: window.location.origin,
+    if (!showTrailer || !trailerKey || !playerContainerRef.current || !window.YT?.Player) {
+      return;
+    }
+
+    // Limpiar contenedor antes de crear nuevo player
+    if (playerContainerRef.current) {
+      playerContainerRef.current.innerHTML = '';
+    }
+
+    playerRef.current = new window.YT.Player(playerContainerRef.current, {
+      videoId: trailerKey,
+      playerVars: {
+        autoplay: 1,
+        mute: 1,
+        controls: 0,
+        start: 0,
+        rel: 0,
+        modestbranding: 1,
+        playsinline: 1,
+        enablejsapi: 1,
+        iv_load_policy: 3,
+        fs: 0,
+        cc_load_policy: 0,
+        hl: 'es-419',
+        autohide: 1,
+        disablekb: 1,
+        origin: window.location.origin,
+        vq: 'highres',
+      },
+      events: {
+        onReady: (event: any) => {
+          setPlayerReady(true);
+          
+          try {
+            event.target.setPlaybackQuality('highres');
+            const availableQualities = event.target.getAvailableQualityLevels?.() || [];
+            console.log('Calidades disponibles:', availableQualities);
+            
+            if (!availableQualities.includes('highres') && availableQualities.length > 0) {
+              const bestQuality = availableQualities[0];
+              event.target.setPlaybackQuality(bestQuality);
+              setCurrentQuality(bestQuality);
+            }
+          } catch (e) {
+            console.log('No se pudo establecer calidad:', e);
+          }
+          
+          event.target.playVideo();
+          if (!isMutedRef.current) event.target.unMute();
         },
-        events: {
-          onReady: (event: any) => {
-            setPlayerReady(true);
-            event.target.playVideo();
-            if (!isMutedRef.current) event.target.unMute();
-          },
-          onStateChange: (event: any) => {
-            if (event.data === window.YT.PlayerState.ENDED) {
-              setShowTrailer(false);
-              setTrailerKey(null);
+        onStateChange: (event: any) => {
+          if (event.data === window.YT.PlayerState.ENDED) {
+            setShowTrailer(false);
+            setTrailerKey(null);
+          }
+          
+          if (event.data === window.YT.PlayerState.BUFFERING) {
+            stallCount.current++;
+            if (stallCount.current > 5 && currentQuality === 'highres') {
+              setCurrentQuality('hd1080');
+              event.target.setPlaybackQuality?.('hd1080');
+              console.log('Reduciendo a 1080p por buffering');
             }
           }
+        },
+        onPlaybackQualityChange: (event: any) => {
+          console.log('Calidad cambiada a:', event.data);
+          setCurrentQuality(event.data);
+        },
+        onError: (event: any) => {
+          console.error('Error del reproductor:', event.data);
         }
-      });
-    }
+      }
+    });
+
     return () => { 
-      if (!showTrailer && playerRef.current) { 
-        try { playerRef.current.destroy(); } catch(e) {}
+      if (playerRef.current) { 
+        try { 
+          playerRef.current.destroy(); 
+        } catch(e) {
+          console.log('Error limpiando player:', e);
+        }
         playerRef.current = null; 
         setPlayerReady(false); 
       } 
     };
-  }, [showTrailer, trailerKey]);
+  }, [showTrailer, trailerKey, playerInstance, currentQuality]);
 
-  // Auto-play carousel
   useEffect(() => {
     if (isAutoPlaying && !isActive) {
       autoPlayRef.current = setInterval(() => {
         setCurrentIndex((p) => (p + 1) % movies.length);
-        setShowTrailer(false); setTrailerKey(null); setPlayerReady(false);
+        setShowTrailer(false); 
+        setTrailerKey(null); 
+        setPlayerReady(false);
       }, autoPlayInterval);
     }
     return () => { if (autoPlayRef.current) clearInterval(autoPlayRef.current); };
@@ -293,7 +409,9 @@ export default function HeroCarousel({
 
   const nextSlide = useCallback(() => {
     setCurrentIndex((p) => (p + 1) % movies.length);
-    setShowTrailer(false); setTrailerKey(null); setPlayerReady(false);
+    setShowTrailer(false); 
+    setTrailerKey(null); 
+    setPlayerReady(false);
   }, [movies.length]);
 
   if (!movies?.length) return null;
@@ -329,7 +447,7 @@ export default function HeroCarousel({
 
       {/* YouTube Trailer */}
       {showTrailer && trailerKey && (
-        <div className="absolute inset-0 w-full h-full">
+        <div className="absolute inset-0 w-full h-full" key={`player-${playerInstance}`}>
           <div 
             ref={playerContainerRef} 
             className="absolute inset-0 w-full h-full"
@@ -379,22 +497,24 @@ export default function HeroCarousel({
             <span className="text-gray-400">•</span>
             <span className="text-yellow-500 font-bold">IMDb {currentMovie.vote_average.toFixed(1)}</span>
             
-            {/* Selector de Audio - Solo si hay más de 1 opción */}
+            {/* Selector de Audio */}
             {showTrailer && availableAudios.length > 1 && (
               <>
                 <span className="text-gray-400">•</span>
                 <div className="relative">
                   <button 
                     onClick={() => setShowAudioSelector(!showAudioSelector)}
-                    className="flex items-center gap-1 px-2 py-1 rounded bg-white/20 hover:bg-white/30 transition-colors text-xs"
+                    className="flex items-center gap-1 px-2 py-1 rounded bg-white/20 hover:bg-white/30 transition-colors text-xs group"
                   >
                     <Globe className="w-3 h-3" />
-                    {availableAudios[selectedAudio]?.label || 'Audio'}
+                    <span>{availableAudios[selectedAudio]?.label || 'Audio'}</span>
+                    <ChevronDown 
+                      className={`w-3 h-3 transition-transform duration-200 ${showAudioSelector ? 'rotate-180' : ''}`} 
+                    />
                   </button>
                   
-                  {/* Dropdown condicional - solo se muestra si showAudioSelector es true */}
                   {showAudioSelector && (
-                    <div className="absolute bottom-full left-0 mb-2 bg-black/90 backdrop-blur-md rounded-lg p-2 min-w-[140px] z-50">
+                    <div className="absolute bottom-full left-0 mb-2 bg-black/90 backdrop-blur-md rounded-lg p-2 min-w-[140px] z-50 border border-white/10 shadow-xl">
                       {availableAudios.map((audio, idx) => (
                         <button
                           key={audio.key}
@@ -402,12 +522,12 @@ export default function HeroCarousel({
                             changeAudio(idx);
                             setShowAudioSelector(false);
                           }}
-                          className={`w-full text-left px-3 py-2 rounded text-sm hover:bg-white/20 transition-colors ${
+                          className={`w-full text-left px-3 py-2 rounded text-sm hover:bg-white/20 transition-colors flex items-center justify-between ${
                             selectedAudio === idx ? 'text-green-400 font-semibold' : 'text-white'
                           }`}
                         >
                           {audio.label}
-                          {selectedAudio === idx && ' ✓'}
+                          {selectedAudio === idx && <span>✓</span>}
                         </button>
                       ))}
                     </div>
@@ -416,7 +536,6 @@ export default function HeroCarousel({
               </>
             )}
             
-            {/* Indicador de audio actual si solo hay uno */}
             {showTrailer && availableAudios.length === 1 && (
               <>
                 <span className="text-gray-400">•</span>
