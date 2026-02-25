@@ -63,12 +63,12 @@ export default function Navbar() {
               ? " text-white"
               : "hover:text-white"}`}>Movies</Link>
 
-        <Link href="/New&Popular" onFocus={() => {
-          setActive("/New&Popular")
-          router.replace("/New&Popular")
+        <Link href="/NewPopular" onFocus={() => {
+          setActive("/NewPopular")
+          router.replace("/NewPopular")
         }}
           className={`outline-0 p-1.5 px-3  text-gray-300 transition
-          ${active === "/New&Popular"
+          ${active === "/NewPopular"
               ? " text-white"
               : "hover:text-white"}`}>New & Popular</Link>
         <Link href="/MiLista" onFocus={() => {
