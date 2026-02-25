@@ -419,8 +419,7 @@ export default function HeroCarousel({
                   href={`https://www.themoviedb.org/genre/${genre.id}`}
                   target='_blank'
                   rel="noopener noreferrer"
-                  className='hover:text-white transition-colors'
-                >
+                  className='hover:text-white transition-colors'>
                   {genre.name}
                 </a>
                 {index < genres.length - 1 && <span>·</span>}
