@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Play, Plus, Volume2, VolumeX, ChevronRight, Info } from 'lucide-react';
+import { Play, Plus, Volume2, VolumeX, ChevronRight, Info, Globe } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -17,13 +17,8 @@ interface Video {
   site: string;
   type: string;
   official: boolean;
-  iso_639_1?: string; // Código de idioma
-  iso_3166_1?: string; // Código de país
-}
-
-interface Genre {
-  id: number;
-  name: string;
+  iso_639_1?: string;
+  iso_3166_1?: string;
 }
 
 interface Movie {
@@ -43,7 +38,7 @@ interface Movie {
   runtime?: number;
   ageRating?: string;
   logo_path?: string;
-  genres?: Genre[];
+  genres?: { id: number; name: string }[];
 }
 
 interface HeroCarouselProps {
@@ -52,21 +47,11 @@ interface HeroCarouselProps {
   trailerDelay?: number;
 }
 
-// Prioridad de idiomas: Español Latino > Inglés > Español España > Otros
-const LANGUAGE_PRIORITY = {
-  'es-MX': 1, // Español México (Latino)
-  'es-419': 1, // Español Latinoamérica
-  'es-AR': 1, // Español Argentina
-  'es-CO': 1, // Español Colombia
-  'es-CL': 1, // Español Chile
-  'es-PE': 1, // Español Perú
-  'es-VE': 1, // Español Venezuela
-  'es-US': 1, // Español Estados Unidos (Latino)
-  'en': 2,    // Inglés
-  'en-US': 2,
-  'en-GB': 2,
-  'es': 3,    // Español genérico (probablemente España)
-  'es-ES': 3, // Español España
+type AudioOption = {
+  key: string;
+  name: string;
+  lang: string;
+  label: string;
 };
 
 export default function HeroCarousel({
@@ -83,7 +68,9 @@ export default function HeroCarousel({
   const [playerReady, setPlayerReady] = useState(false);
   const [logoLoaded, setLogoLoaded] = useState(false);
   const [logoError, setLogoError] = useState(false);
-  const [currentAudioLang, setCurrentAudioLang] = useState<string>('');
+  const [availableAudios, setAvailableAudios] = useState<AudioOption[]>([]);
+  const [selectedAudio, setSelectedAudio] = useState<number>(0);
+  const [showAudioSelector, setShowAudioSelector] = useState(false);
 
   const autoPlayRef = useRef<NodeJS.Timeout | null>(null);
   const trailerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -99,7 +86,9 @@ export default function HeroCarousel({
   useEffect(() => { 
     setLogoLoaded(false); 
     setLogoError(false);
-    setCurrentAudioLang('');
+    setAvailableAudios([]);
+    setSelectedAudio(0);
+    setShowAudioSelector(false); // Asegurar que inicie cerrado
   }, [currentIndex]);
 
   useEffect(() => {
@@ -111,60 +100,71 @@ export default function HeroCarousel({
     }
   }, []);
 
-  // Función mejorada para obtener trailer con prioridad de idioma
-  const getTrailerKey = useCallback((movie: Movie): { key: string | null; lang: string } => {
-    if (!movie.videos?.results?.length) return { key: null, lang: '' };
+  // Organizar videos por idioma
+  const organizeVideosByLanguage = useCallback((movie: Movie): AudioOption[] => {
+    if (!movie.videos?.results?.length) return [];
 
     const videos = movie.videos.results.filter(v => v.site === 'YouTube');
-    
-    if (videos.length === 0) return { key: null, lang: '' };
+    const options: AudioOption[] = [];
+    const usedKeys = new Set();
 
-    // Primero buscar por idioma específico en name (heurística)
-    const getLanguagePriority = (video: Video): number => {
-      const name = video.name?.toLowerCase() || '';
-      const lang = video.iso_639_1 || '';
-      const country = video.iso_3166_1 || '';
-      const fullLang = country ? `${lang}-${country}` : lang;
-
-      // Prioridad 1: Latino por nombre
-      if (name.includes('latino') || name.includes('latin') || name.includes('mexicano')) return 1;
+    // Prioridad 1: Latino (detectar por nombre o código)
+    videos.forEach(v => {
+      const name = v.name?.toLowerCase() || '';
+      const isLatino = name.includes('latino') || name.includes('latin') || name.includes('mexicano');
+      const isES = v.iso_639_1 === 'es' && (v.iso_3166_1 === 'MX' || v.iso_3166_1 === 'AR' || !v.iso_3166_1);
       
-      // Prioridad por código de idioma
-      if (LANGUAGE_PRIORITY[fullLang as keyof typeof LANGUAGE_PRIORITY]) {
-        return LANGUAGE_PRIORITY[fullLang as keyof typeof LANGUAGE_PRIORITY];
+      if ((isLatino || isES) && !usedKeys.has(v.key)) {
+        options.push({
+          key: v.key,
+          name: v.name,
+          lang: v.iso_639_1 || 'es',
+          label: 'Español Latino'
+        });
+        usedKeys.add(v.key);
       }
-      if (LANGUAGE_PRIORITY[lang as keyof typeof LANGUAGE_PRIORITY]) {
-        return LANGUAGE_PRIORITY[lang as keyof typeof LANGUAGE_PRIORITY];
-      }
-
-      // Heurística adicional por nombre
-      if (name.includes('español') || name.includes('spanish')) {
-        if (name.includes('españa') || name.includes('spain') || name.includes('castellano')) return 3;
-        if (name.includes('latino') || name.includes('latin')) return 1;
-        return 2; // Asumir latino si no especifica
-      }
-
-      return 10; // Otros idiomas
-    };
-
-    // Ordenar videos por prioridad
-    const sortedVideos = videos.sort((a, b) => {
-      const priorityA = getLanguagePriority(a);
-      const priorityB = getLanguagePriority(b);
-      return priorityA - priorityB;
     });
 
-    // Priorizar trailers oficiales dentro del mismo nivel de idioma
-    const officialTrailers = sortedVideos.filter(v => v.type === 'Trailer' && v.official);
-    const regularTrailers = sortedVideos.filter(v => v.type === 'Trailer');
-    const allVideos = sortedVideos;
+    // Prioridad 2: Inglés
+    videos.forEach(v => {
+      if (v.iso_639_1 === 'en' && !usedKeys.has(v.key)) {
+        options.push({
+          key: v.key,
+          name: v.name,
+          lang: 'en',
+          label: 'English'
+        });
+        usedKeys.add(v.key);
+      }
+    });
 
-    const selected = officialTrailers[0] || regularTrailers[0] || allVideos[0];
-    
-    return { 
-      key: selected?.key || null, 
-      lang: selected?.iso_639_1 || 'unknown'
-    };
+    // Prioridad 3: Español (España)
+    videos.forEach(v => {
+      if (v.iso_639_1 === 'es' && !usedKeys.has(v.key)) {
+        options.push({
+          key: v.key,
+          name: v.name,
+          lang: 'es',
+          label: 'Español'
+        });
+        usedKeys.add(v.key);
+      }
+    });
+
+    // Prioridad 4: Cualquier otro
+    videos.forEach(v => {
+      if (!usedKeys.has(v.key)) {
+        options.push({
+          key: v.key,
+          name: v.name,
+          lang: v.iso_639_1 || 'otro',
+          label: v.iso_639_1?.toUpperCase() || 'OTRO'
+        });
+        usedKeys.add(v.key);
+      }
+    });
+
+    return options;
   }, []);
 
   const formatRuntime = useCallback((minutes?: number): string => {
@@ -193,11 +193,13 @@ export default function HeroCarousel({
     if (isActive) {
       setIsAutoPlaying(false);
       trailerTimeoutRef.current = setTimeout(() => {
-        const { key, lang } = getTrailerKey(currentMovie);
-        if (key) { 
-          setTrailerKey(key); 
+        const audios = organizeVideosByLanguage(currentMovie);
+        if (audios.length > 0) {
+          setAvailableAudios(audios);
+          setTrailerKey(audios[0].key);
           setShowTrailer(true);
-          setCurrentAudioLang(lang);
+          // IMPORTANTE: No abrir el selector automáticamente
+          setShowAudioSelector(false);
         }
       }, trailerDelay);
     } else {
@@ -205,23 +207,26 @@ export default function HeroCarousel({
       setShowTrailer(false);
       setTrailerKey(null);
       setPlayerReady(false);
-      setCurrentAudioLang('');
+      setAvailableAudios([]);
+      setShowAudioSelector(false); // Cerrar al salir
       if (trailerTimeoutRef.current) clearTimeout(trailerTimeoutRef.current);
     }
     return () => { if (trailerTimeoutRef.current) clearTimeout(trailerTimeoutRef.current); };
-  }, [isActive, currentMovie, getTrailerKey, trailerDelay]);
+  }, [isActive, currentMovie, organizeVideosByLanguage, trailerDelay]);
 
-  // YouTube Player con configuración de idioma
+  // Cambiar audio
+  const changeAudio = useCallback((index: number) => {
+    if (playerRef.current) {
+      try { playerRef.current.destroy(); } catch(e) {}
+    }
+    setSelectedAudio(index);
+    setTrailerKey(availableAudios[index].key);
+    setPlayerReady(false);
+  }, [availableAudios]);
+
+  // YouTube Player
   useEffect(() => {
     if (showTrailer && trailerKey && playerContainerRef.current && window.YT?.Player) {
-      if (playerRef.current) {
-        try { playerRef.current.destroy(); } catch(e) {}
-      }
-
-      // Configurar idioma del reproductor
-      const isLatino = currentAudioLang.includes('es') && !currentAudioLang.includes('ES');
-      const ccLang = isLatino ? 'es-419' : 'en';
-
       playerRef.current = new window.YT.Player(playerContainerRef.current, {
         videoId: trailerKey,
         playerVars: {
@@ -235,9 +240,8 @@ export default function HeroCarousel({
           enablejsapi: 1,
           iv_load_policy: 3,
           fs: 0,
-          cc_load_policy: isLatino ? 1 : 0, // Forzar CC si es latino
-          cc_lang_pref: ccLang,
-          hl: isLatino ? 'es-419' : 'en', // Interfaz en español latino
+          cc_load_policy: 0,
+          hl: 'es-419',
           autohide: 1,
           disablekb: 1,
           origin: window.location.origin,
@@ -247,9 +251,6 @@ export default function HeroCarousel({
             setPlayerReady(true);
             event.target.playVideo();
             if (!isMutedRef.current) event.target.unMute();
-            
-            // Intentar cambiar calidad a HD
-            event.target.setPlaybackQuality('hd1080');
           },
           onStateChange: (event: any) => {
             if (event.data === window.YT.PlayerState.ENDED) {
@@ -267,7 +268,7 @@ export default function HeroCarousel({
         setPlayerReady(false); 
       } 
     };
-  }, [showTrailer, trailerKey, currentAudioLang]);
+  }, [showTrailer, trailerKey]);
 
   // Auto-play carousel
   useEffect(() => {
@@ -294,14 +295,6 @@ export default function HeroCarousel({
     setCurrentIndex((p) => (p + 1) % movies.length);
     setShowTrailer(false); setTrailerKey(null); setPlayerReady(false);
   }, [movies.length]);
-
-  // Función para mostrar etiqueta de idioma
-  const getLanguageLabel = (lang: string): string => {
-    if (lang.includes('es') && !lang.includes('ES')) return 'LAT';
-    if (lang === 'en' || lang.includes('en')) return 'EN';
-    if (lang.includes('es')) return 'ESP';
-    return lang.toUpperCase();
-  };
 
   if (!movies?.length) return null;
 
@@ -340,10 +333,7 @@ export default function HeroCarousel({
           <div 
             ref={playerContainerRef} 
             className="absolute inset-0 w-full h-full"
-            style={{ 
-              transform: 'scale(1.2)',
-              pointerEvents: 'none'
-            }}
+            style={{ transform: 'scale(1.2)', pointerEvents: 'none' }}
           />
         </div>
       )}
@@ -364,20 +354,16 @@ export default function HeroCarousel({
                 alt={currentMovie.title || currentMovie.name}
                 className={`h-full w-auto object-contain object-left transition-all duration-500 ${logoLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
                 style={{ 
-                  filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.9)) drop-shadow(0 8px 24px rgba(0,0,0,0.6))',
+                  filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.9))',
                   maxWidth: '100%'
                 }}
                 onLoad={() => setLogoLoaded(true)}
                 onError={() => setLogoError(true)}
               />
             ) : (
-              <h1 className="text-4xl md:text-6xl font-bold text-white drop-shadow-2xl" style={{ textShadow: '0 4px 12px rgba(0,0,0,0.9)' }}>
+              <h1 className="text-4xl md:text-6xl font-bold text-white drop-shadow-2xl">
                 {currentMovie.title || currentMovie.name}
               </h1>
-            )}
-            
-            {!logoLoaded && !logoError && logoUrl && (
-              <div className="absolute inset-0 bg-gray-800/50 animate-pulse rounded" />
             )}
           </div>
 
@@ -391,26 +377,58 @@ export default function HeroCarousel({
             <span className="text-gray-400">•</span>
             <span>{durationOrSeasons}</span>
             <span className="text-gray-400">•</span>
-            <div className="flex items-center gap-1">
-              <span className="text-yellow-500 font-bold">IMDb</span>
-              <span>{currentMovie.vote_average.toFixed(1)}</span>
-            </div>
-            {showTrailer && (
+            <span className="text-yellow-500 font-bold">IMDb {currentMovie.vote_average.toFixed(1)}</span>
+            
+            {/* Selector de Audio - Solo si hay más de 1 opción */}
+            {showTrailer && availableAudios.length > 1 && (
               <>
                 <span className="text-gray-400">•</span>
-                <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                  currentAudioLang.includes('es') && !currentAudioLang.includes('ES') 
-                    ? 'bg-green-600 text-white' 
-                    : 'bg-blue-600 text-white'
-                }`}>
-                  {getLanguageLabel(currentAudioLang)}
+                <div className="relative">
+                  <button 
+                    onClick={() => setShowAudioSelector(!showAudioSelector)}
+                    className="flex items-center gap-1 px-2 py-1 rounded bg-white/20 hover:bg-white/30 transition-colors text-xs"
+                  >
+                    <Globe className="w-3 h-3" />
+                    {availableAudios[selectedAudio]?.label || 'Audio'}
+                  </button>
+                  
+                  {/* Dropdown condicional - solo se muestra si showAudioSelector es true */}
+                  {showAudioSelector && (
+                    <div className="absolute bottom-full left-0 mb-2 bg-black/90 backdrop-blur-md rounded-lg p-2 min-w-[140px] z-50">
+                      {availableAudios.map((audio, idx) => (
+                        <button
+                          key={audio.key}
+                          onClick={() => {
+                            changeAudio(idx);
+                            setShowAudioSelector(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 rounded text-sm hover:bg-white/20 transition-colors ${
+                            selectedAudio === idx ? 'text-green-400 font-semibold' : 'text-white'
+                          }`}
+                        >
+                          {audio.label}
+                          {selectedAudio === idx && ' ✓'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+            
+            {/* Indicador de audio actual si solo hay uno */}
+            {showTrailer && availableAudios.length === 1 && (
+              <>
+                <span className="text-gray-400">•</span>
+                <span className="text-green-400 text-xs font-semibold">
+                  {availableAudios[0].label}
                 </span>
               </>
             )}
           </div>
 
           {/* Overview */}
-          <p className="text-gray-200 text-base md:text-lg line-clamp-3 max-w-xl leading-relaxed drop-shadow-lg">
+          <p className="text-gray-200 text-base md:text-lg line-clamp-3 max-w-xl leading-relaxed">
             {currentMovie.overview}
           </p>
 
@@ -418,7 +436,7 @@ export default function HeroCarousel({
           <div className="flex items-center gap-2 text-sm text-gray-400">
             {genres.map((genre, index) => (
               <React.Fragment key={genre.id}>
-                <span className="hover:text-white cursor-pointer transition-colors">{genre.name}</span>
+                <span className="hover:text-white cursor-pointer">{genre.name}</span>
                 {index < genres.length - 1 && <span>•</span>}
               </React.Fragment>
             ))}
@@ -427,7 +445,7 @@ export default function HeroCarousel({
           {/* Buttons */}
           <div className="flex items-center gap-3 pt-2">
             <a 
-              href={`https://www.themoviledb.org/${currentMovie.media_type}/${currentMovie.id}`}
+              href={`https://www.themoviedb.org/${currentMovie.media_type}/${currentMovie.id}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 bg-white text-black px-8 py-3 rounded font-semibold hover:bg-gray-200 transition-colors"
@@ -455,22 +473,17 @@ export default function HeroCarousel({
         {/* Right side controls */}
         <div className="absolute right-4 sm:right-6 lg:right-12 bottom-20 flex items-center gap-3">
           {showTrailer && (
-            <>
-              <div className="px-3 py-1.5 rounded-full bg-black/50 text-white text-xs backdrop-blur-sm border border-white/20">
-                {getLanguageLabel(currentAudioLang)}
-              </div>
-              <button 
-                onClick={toggleMute}
-                className="p-3 rounded-full border border-white/30 bg-black/30 text-white hover:bg-white/20 transition-all backdrop-blur-sm"
-              >
-                {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-              </button>
-            </>
+            <button 
+              onClick={toggleMute}
+              className="p-3 rounded-full border border-white/30 bg-black/30 text-white hover:bg-white/20 backdrop-blur-sm"
+            >
+              {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            </button>
           )}
           
           <button 
             onClick={nextSlide}
-            className="p-3 rounded-full border border-white/30 bg-black/30 text-white hover:bg-white/20 transition-all backdrop-blur-sm"
+            className="p-3 rounded-full border border-white/30 bg-black/30 text-white hover:bg-white/20 backdrop-blur-sm"
           >
             <ChevronRight className="w-5 h-5" />
           </button>
@@ -487,7 +500,7 @@ export default function HeroCarousel({
               setShowTrailer(false);
               setTrailerKey(null);
             }}
-            className={`h-1 rounded-full transition-all duration-300 ${index === currentIndex ? 'w-8 bg-white' : 'w-2 bg-white/40 hover:bg-white/60'}`}
+            className={`h-1 rounded-full transition-all ${index === currentIndex ? 'w-8 bg-white' : 'w-2 bg-white/40'}`}
           />
         ))}
       </div>
