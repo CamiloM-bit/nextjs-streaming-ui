@@ -8,8 +8,8 @@ interface MediaLoaderProps {
 
 export default function MediaLoader({ type = 'movies' }: MediaLoaderProps) {
   const titles = {
-    movies: 'Cargando Películas',
-    series: 'Cargando Series',
+    movies: 'Cargando',
+    series: 'Cargando',
     'new-popular': 'Cargando'
   };
 
