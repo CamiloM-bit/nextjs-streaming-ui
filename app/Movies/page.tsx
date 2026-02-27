@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import HeroCarousel from "@/app/components/hero/HeroCarousel";
-import MediaLoader from "@/app/components/loaders/MediaLoader";
+import MediaLoader from "@/app/components/ui/loaders/MediaLoader";
 
 export const metadata: Metadata = {
   title: "Películas | Moonlight",

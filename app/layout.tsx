@@ -1,7 +1,7 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import { Noto_Sans_Mono } from "next/font/google";
-import Navbar from '@/app/components/Navbar'
-import KeyboardNavigation from "./components/KeyboardNavigation";
+import Navbar from '@/app/components/layout/Navbar'
+import KeyboardNavigation from "./components/navigation/KeyboardNavigation";
 import "./globals.css";
 
 const geistSans = Geist({
