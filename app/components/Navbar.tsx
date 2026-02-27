@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import Notificacion from '@/app/components/Notification'
@@ -27,8 +28,8 @@ export default function Navbar() {
       <div className=" border-red-800  flex-1 h-full">
         <div className=" border-orange-500 h-full w-[50%] content-center"> {/* Logo Container */}
           <div>
-            <figure className=" border-red-500 m-2.5 flex justify-center">
-              <img className="w-37.5 text-center" src="https://tv.selectra.com/sites/tv.selectra.com/files/styles/article_hero/public/images/logos/netflix-logo.png?itok=fCUER-69" alt="Logo" />
+            <figure className="border border-red-500 m-1.5 flex justify-center w-25">
+              <img className="text-center object-contain w-75" src="Nextify.svg" alt="Logo"  />
             </figure>
           </div>
         </div>
