@@ -10,6 +10,10 @@ declare global {
   }
 }
 
+// ============================================
+// INTERFACES
+// ============================================
+
 interface Video {
   id: string;
   key: string;
@@ -21,28 +25,32 @@ interface Video {
   iso_3166_1?: string;
 }
 
-interface Movie {
+interface Genre {
   id: number;
-  title: string;
-  name?: string;
+  name: string;
+}
+
+// Interfaz que recibe del padre - todo ya formateado
+interface CarouselItem {
+  id: number;
+  displayTitle: string;
+  displayYear: string;
+  displayRuntime: string;
   overview: string;
   backdrop_path: string;
   poster_path: string;
   vote_average: number;
-  release_date?: string;
-  first_air_date?: string;
-  videos?: { results: Video[] };
-  media_type?: 'movie' | 'tv';
-  number_of_seasons?: number;
-  number_of_episodes?: number;
-  runtime?: number;
   ageRating?: string;
   logo_path?: string;
-  genres?: { id: number; name: string }[];
+  genres?: Genre[];
+  videos?: { results: Video[] };
+  mediaType: 'movie' | 'tv';
+  tmdbUrl: string;
 }
 
 interface HeroCarouselProps {
-  movies: Movie[];
+  items: CarouselItem[];
+  mediaType?: 'movie' | 'tv'; // AHORA OPCIONAL - fallback si el item no lo tiene
   autoPlayInterval?: number;
   trailerDelay?: number;
 }
@@ -56,11 +64,15 @@ type AudioOption = {
 
 type QualityLevel = 'highres' | 'hd1080' | 'hd720' | 'large' | 'medium' | 'small' | 'tiny' | 'auto';
 
-// Cache global para logos precargados
 const logoCache = new Map<string, HTMLImageElement>();
 
+// ============================================
+// COMPONENTE PRINCIPAL
+// ============================================
+
 export default function HeroCarousel({
-  movies,
+  items,
+  mediaType: defaultMediaType = 'movie', // Valor por defecto
   autoPlayInterval = 8000,
   trailerDelay = 2000
 }: HeroCarouselProps) {
@@ -68,7 +80,7 @@ export default function HeroCarousel({
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
   const [showTrailer, setShowTrailer] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
   const [logoLoaded, setLogoLoaded] = useState(false);
@@ -78,9 +90,7 @@ export default function HeroCarousel({
   const [showAudioSelector, setShowAudioSelector] = useState(false);
   const [currentQuality, setCurrentQuality] = useState<QualityLevel>('highres');
   const [performanceIssues, setPerformanceIssues] = useState(0);
-  const [playerInstance, setPlayerInstance] = useState<number>(0);
-  // Estado para el logo precargado del siguiente
-  const [preloadedLogos, setPreloadedLogos] = useState<Set<string>>(new Set());
+  const [playerInstance, setPlayerInstance] = useState(0);
 
   const autoPlayRef = useRef<NodeJS.Timeout | null>(null);
   const trailerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -90,46 +100,59 @@ export default function HeroCarousel({
   const lastPlaybackTime = useRef<number>(0);
   const stallCount = useRef<number>(0);
 
-  const currentMovie = movies[currentIndex];
+  const currentItem = items[currentIndex];
   const isActive = isHovered;
 
   useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
 
-  // Precargar logos de todas las películas al inicio y de los adyacentes
+  // ============================================
+  // HELPERS
+  // ============================================
+
+  const getMatchPercent = useCallback((rating: number): string => {
+    const match = Math.min(98, Math.round((rating / 10) * 100));
+    return `${match}%`;
+  }, []);
+
+  // ============================================
+  // EFECTOS
+  // ============================================
+
   useEffect(() => {
-    const preloadLogo = (movie: Movie) => {
-      if (!movie.logo_path || logoCache.has(movie.logo_path)) return;
+    const preloadLogo = (item: CarouselItem) => {
+      if (!item.logo_path || logoCache.has(item.logo_path)) return;
       
       const img = new Image();
-      const logoUrl = `https://image.tmdb.org/t/p/original${movie.logo_path}`;
+      const logoUrl = `https://image.tmdb.org/t/p/original${item.logo_path}`;
       
       img.onload = () => {
-        logoCache.set(movie.logo_path!, img);
-        setPreloadedLogos(prev => new Set(prev).add(movie.logo_path!));
+        logoCache.set(item.logo_path!, img);
       };
       
       img.onerror = () => {
-        console.log(`Error precargando logo: ${movie.title || movie.name}`);
+        console.log(`Error precargando logo: ${item.displayTitle}`);
       };
       
       img.src = logoUrl;
     };
 
-    // Precargar todas las películas al inicio
-    movies.forEach(preloadLogo);
-  }, [movies]);
+    items.forEach(preloadLogo);
+  }, [items]);
 
-  // Precargar el logo del siguiente cuando cambia el índice
   useEffect(() => {
-    const nextIndex = (currentIndex + 1) % movies.length;
-    const prevIndex = (currentIndex - 1 + movies.length) % movies.length;
+    const nextIndex = (currentIndex + 1) % items.length;
+    const prevIndex = (currentIndex - 1 + items.length) % items.length;
     
-    // Precargar siguiente y anterior
-    if (movies[nextIndex]) preloadLogo(movies[nextIndex]);
-    if (movies[prevIndex]) preloadLogo(movies[prevIndex]);
+    if (items[nextIndex]?.logo_path) {
+      const img = new Image();
+      img.src = `https://image.tmdb.org/t/p/original${items[nextIndex].logo_path}`;
+    }
+    if (items[prevIndex]?.logo_path) {
+      const img = new Image();
+      img.src = `https://image.tmdb.org/t/p/original${items[prevIndex].logo_path}`;
+    }
     
-    // Verificar si el logo actual ya está en caché
-    if (currentMovie?.logo_path && logoCache.has(currentMovie.logo_path)) {
+    if (currentItem?.logo_path && logoCache.has(currentItem.logo_path)) {
       setLogoLoaded(true);
       setLogoError(false);
     } else {
@@ -143,22 +166,7 @@ export default function HeroCarousel({
     setCurrentQuality('highres');
     setPerformanceIssues(0);
     stallCount.current = 0;
-  }, [currentIndex, movies, currentMovie]);
-
-  // Función auxiliar para precargar (definida dentro del componente para acceder a movies)
-  const preloadLogo = useCallback((movie: Movie) => {
-    if (!movie.logo_path || logoCache.has(movie.logo_path)) return;
-    
-    const img = new Image();
-    const logoUrl = `https://image.tmdb.org/t/p/original${movie.logo_path}`;
-    
-    img.onload = () => {
-      logoCache.set(movie.logo_path!, img);
-      setPreloadedLogos(prev => new Set(prev).add(movie.logo_path!));
-    };
-    
-    img.src = logoUrl;
-  }, []);
+  }, [currentIndex, items, currentItem]);
 
   useEffect(() => {
     if (!window.YT && !document.getElementById('youtube-api')) {
@@ -187,11 +195,9 @@ export default function HeroCarousel({
               if (newIssues > 2 && currentQuality === 'highres') {
                 setCurrentQuality('hd1080');
                 playerRef.current?.setPlaybackQuality?.('hd1080');
-                console.log('Reduciendo calidad a 1080p por problemas de rendimiento');
               } else if (newIssues > 4 && currentQuality === 'hd1080') {
                 setCurrentQuality('hd720');
                 playerRef.current?.setPlaybackQuality?.('hd720');
-                console.log('Reduciendo calidad a 720p por problemas de rendimiento');
               }
               
               return newIssues;
@@ -214,10 +220,10 @@ export default function HeroCarousel({
     return () => clearInterval(interval);
   }, [showTrailer, playerReady, checkPerformance]);
 
-  const organizeVideosByLanguage = useCallback((movie: Movie): AudioOption[] => {
-    if (!movie.videos?.results?.length) return [];
+  const organizeVideosByLanguage = useCallback((item: CarouselItem): AudioOption[] => {
+    if (!item.videos?.results?.length) return [];
 
-    const videos = movie.videos.results.filter(v => v.site === 'YouTube');
+    const videos = item.videos.results.filter(v => v.site === 'YouTube');
     const options: AudioOption[] = [];
     const usedKeys = new Set();
 
@@ -276,32 +282,11 @@ export default function HeroCarousel({
     return options;
   }, []);
 
-  const formatRuntime = useCallback((minutes?: number): string => {
-    if (!minutes) return '';
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
-  }, []);
-
-  const getSeriesInfo = useCallback((movie: Movie): string => {
-    if (movie.media_type !== 'tv') return '';
-    const seasons = movie.number_of_seasons || 0;
-    const episodes = movie.number_of_episodes || 0;
-    if (seasons === 1 && episodes > 0) return `${episodes} episodios`;
-    if (seasons > 1) return `${seasons} temporadas`;
-    return '';
-  }, []);
-
-  const getMatchPercent = useCallback((rating: number): string => {
-    const match = Math.min(98, Math.round((rating / 10) * 100));
-    return `${match}%`;
-  }, []);
-
   useEffect(() => {
     if (isActive) {
       setIsAutoPlaying(false);
       trailerTimeoutRef.current = setTimeout(() => {
-        const audios = organizeVideosByLanguage(currentMovie);
+        const audios = organizeVideosByLanguage(currentItem);
         if (audios.length > 0) {
           setAvailableAudios(audios);
           setTrailerKey(audios[0].key);
@@ -324,7 +309,7 @@ export default function HeroCarousel({
       if (trailerTimeoutRef.current) clearTimeout(trailerTimeoutRef.current);
     }
     return () => { if (trailerTimeoutRef.current) clearTimeout(trailerTimeoutRef.current); };
-  }, [isActive, currentMovie, organizeVideosByLanguage, trailerDelay]);
+  }, [isActive, currentItem, organizeVideosByLanguage, trailerDelay]);
 
   const changeAudio = useCallback((index: number) => {
     if (playerRef.current) {
@@ -434,14 +419,14 @@ export default function HeroCarousel({
   useEffect(() => {
     if (isAutoPlaying && !isActive) {
       autoPlayRef.current = setInterval(() => {
-        setCurrentIndex((p) => (p + 1) % movies.length);
+        setCurrentIndex((p) => (p + 1) % items.length);
         setShowTrailer(false); 
         setTrailerKey(null); 
         setPlayerReady(false);
       }, autoPlayInterval);
     }
     return () => { if (autoPlayRef.current) clearInterval(autoPlayRef.current); };
-  }, [isAutoPlaying, isActive, movies.length, autoPlayInterval]);
+  }, [isAutoPlaying, isActive, items.length, autoPlayInterval]);
 
   const toggleMute = useCallback(() => {
     const newState = !isMuted;
@@ -457,30 +442,29 @@ export default function HeroCarousel({
   }, [playerReady, isMuted]);
 
   const nextSlide = useCallback(() => {
-    setCurrentIndex((p) => (p + 1) % movies.length);
+    setCurrentIndex((p) => (p + 1) % items.length);
     setShowTrailer(false); 
     setTrailerKey(null); 
     setPlayerReady(false);
-  }, [movies.length]);
+  }, [items.length]);
 
-  if (!movies?.length) return null;
+  if (!items?.length) return null;
 
-  const backdropUrl = `https://image.tmdb.org/t/p/original${currentMovie.backdrop_path}`;
-  const logoUrl = currentMovie.logo_path ? `https://image.tmdb.org/t/p/original${currentMovie.logo_path}` : null;
-  
-  const year = currentMovie.media_type === 'tv' 
-    ? (currentMovie.first_air_date ? new Date(currentMovie.first_air_date).getFullYear() : '')
-    : (currentMovie.release_date ? new Date(currentMovie.release_date).getFullYear() : '');
-  
-  const durationOrSeasons = currentMovie.media_type === 'tv' 
-    ? getSeriesInfo(currentMovie) 
-    : formatRuntime(currentMovie.runtime);
-  
-  const matchPercent = getMatchPercent(currentMovie.vote_average);
-  const genres = currentMovie.genres?.slice(0, 3) || [];
+  // ============================================
+  // RENDER - Usa los datos ya formateados
+  // ============================================
 
-  // Verificar si el logo está precargado
-  const isLogoPreloaded = currentMovie?.logo_path && logoCache.has(currentMovie.logo_path);
+  const backdropUrl = `https://image.tmdb.org/t/p/original${currentItem.backdrop_path}`;
+  const logoUrl = currentItem.logo_path ? `https://image.tmdb.org/t/p/original${currentItem.logo_path}` : null;
+  
+  // Datos ya formateados del item
+  const title = currentItem.displayTitle;
+  const year = currentItem.displayYear;
+  const duration = currentItem.displayRuntime;
+  const matchPercent = getMatchPercent(currentItem.vote_average);
+  const genres = currentItem.genres?.slice(0, 3) || [];
+  const isLogoPreloaded = currentItem?.logo_path && logoCache.has(currentItem.logo_path);
+  const tmdbUrl = currentItem.tmdbUrl;
 
   return (
     <div 
@@ -488,7 +472,6 @@ export default function HeroCarousel({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Background Image */}
       <div className="absolute inset-0">
         <img 
           src={backdropUrl} 
@@ -497,7 +480,6 @@ export default function HeroCarousel({
         />
       </div>
 
-      {/* YouTube Trailer */}
       {showTrailer && trailerKey && (
         <div className="absolute inset-0 w-full h-full" key={`player-${playerInstance}`}>
           <div 
@@ -508,20 +490,17 @@ export default function HeroCarousel({
         </div>
       )}
 
-      {/* Gradient Overlays */}
       <div className={`absolute inset-0 bg-linear-to-r from-black via-black/60 to-transparent transition-opacity duration-500 ${showTrailer ? 'opacity-60' : 'opacity-80'}`} />
       <div className="absolute inset-0 bg-linear-to-t from-black via-transparent to-black/30" />
 
-      {/* Content */}
       <div className="absolute bottom-0 left-0 w-full pb-20 px-4 sm:px-6 lg:px-12 xl:px-16">
         <div className="max-w-2xl space-y-6">
           
-          {/* Logo - Con precarga instantánea */}
           <div className="relative h-32 md:h-40 w-full max-w-lg">
             {logoUrl && !logoError ? (
               <img 
                 src={logoUrl} 
-                alt={currentMovie.title || currentMovie.name}
+                alt={title}
                 className={`h-full w-auto object-contain object-left transition-all duration-300 ${
                   isLogoPreloaded || logoLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
                 }`}
@@ -534,24 +513,22 @@ export default function HeroCarousel({
               />
             ) : (
               <h1 className="text-4xl md:text-6xl font-bold text-white drop-shadow-2xl">
-                {currentMovie.title || currentMovie.name}
+                {title}
               </h1>
             )}
           </div>
 
-          {/* Metadata */}
           <div className="flex items-center gap-3 text-sm md:text-base text-gray-200 flex-wrap">
             <span className="text-green-400 font-semibold">{matchPercent} de coincidencia</span>
             <span className="text-gray-400">•</span>
             <span>{year}</span>
             <span className="text-gray-400">•</span>
-            <span className="border border-gray-500 px-1.5 py-0.5 text-xs rounded">{currentMovie.ageRating || '13+'}</span>
+            <span className="border border-gray-500 px-1.5 py-0.5 text-xs rounded">{currentItem.ageRating || '13+'}</span>
             <span className="text-gray-400">•</span>
-            <span>{durationOrSeasons}</span>
+            <span>{duration}</span>
             <span className="text-gray-400">•</span>
-            <span className="text-yellow-500 font-bold">IMDb {currentMovie.vote_average.toFixed(1)}</span>
+            <span className="text-yellow-500 font-bold">IMDb {currentItem.vote_average.toFixed(1)}</span>
             
-            {/* Selector de Audio */}
             {showTrailer && availableAudios.length > 1 && (
               <>
                 <span className="text-gray-400">•</span>
@@ -600,12 +577,10 @@ export default function HeroCarousel({
             )}
           </div>
 
-          {/* Overview */}
           <p className="text-gray-200 text-base md:text-lg line-clamp-3 max-w-xl leading-relaxed">
-            {currentMovie.overview}
+            {currentItem.overview}
           </p>
 
-          {/* Genres */}
           <div className="flex items-center gap-2 text-sm text-gray-400">
             {genres.map((genre, index) => (
               <React.Fragment key={genre.id}>
@@ -615,10 +590,9 @@ export default function HeroCarousel({
             ))}
           </div>
 
-          {/* Buttons */}
           <div className="flex items-center gap-3 pt-2">
             <a 
-              href={`https://www.themoviedb.org/${currentMovie.media_type}/${currentMovie.id}`}
+              href={tmdbUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 bg-white text-black px-8 py-3 rounded font-semibold hover:bg-gray-200 transition-colors"
@@ -628,7 +602,7 @@ export default function HeroCarousel({
             </a>
             
             <a 
-              href={`https://www.themoviedb.org/${currentMovie.media_type}/${currentMovie.id}`}
+              href={tmdbUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 bg-gray-600/80 text-white px-6 py-3 rounded font-semibold hover:bg-gray-500/80 transition-colors backdrop-blur-sm"
@@ -643,7 +617,6 @@ export default function HeroCarousel({
           </div>
         </div>
 
-        {/* Right side controls */}
         <div className="absolute right-4 sm:right-6 lg:right-12 bottom-20 flex items-center gap-3">
           {showTrailer && (
             <button 
@@ -663,9 +636,8 @@ export default function HeroCarousel({
         </div>
       </div>
 
-      {/* Carousel indicators */}
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-2">
-        {movies.map((_, index) => (
+        {items.map((_, index) => (
           <button
             key={index}
             onClick={() => {

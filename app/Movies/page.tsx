@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import HeroCarouselMovies from "@/app/components/hero/HeroCarouselMovies";
+import HeroCarousel from "@/app/components/hero/HeroCarousel";
 import MediaLoader from "@/app/components/loaders/MediaLoader";
 
 export const metadata: Metadata = {
-  title: "Películas",
+  title: "Películas | Moonlight",
 };
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
@@ -17,6 +17,8 @@ interface Video {
   site: string;
   type: string;
   official: boolean;
+  iso_639_1?: string;
+  iso_3166_1?: string;
 }
 
 interface Genre {
@@ -24,22 +26,25 @@ interface Genre {
   name: string;
 }
 
-interface Movie {
+// Interfaz que espera el HeroCarousel
+interface CarouselItem {
   id: number;
-  title: string;
+  displayTitle: string;
+  displayYear: string;
+  displayRuntime: string;
   overview: string;
   backdrop_path: string;
   poster_path: string;
   vote_average: number;
-  release_date: string;
-  videos?: { results: Video[] };
-  runtime?: number;
   ageRating?: string;
   logo_path?: string;
   genres?: Genre[];
+  videos?: { results: Video[] };
+  mediaType: 'movie';
+  tmdbUrl: string;
 }
 
-async function getTrendingMovies(): Promise<Movie[]> {
+async function getTrendingMovies(): Promise<CarouselItem[]> {
   try {
     if (!TMDB_API_KEY) { 
       console.error('TMDB_API_KEY no está configurada');
@@ -95,17 +100,49 @@ async function getTrendingMovies(): Promise<Movie[]> {
             }
           } catch (e) { console.error(e); }
 
-          return { 
-            ...item, 
-            videos: videosData, 
-            ageRating, 
-            logo_path: logoPath, 
-            runtime: detailsData.runtime,
-            genres: detailsData.genres?.slice(0, 5) || []
+          // Formatear runtime
+          const runtime = detailsData.runtime || 0;
+          let displayRuntime = '';
+          if (runtime > 0) {
+            const hours = Math.floor(runtime / 60);
+            const mins = runtime % 60;
+            displayRuntime = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+          }
+
+          return {
+            id: item.id,
+            displayTitle: item.title || 'Sin título',
+            displayYear: item.release_date ? new Date(item.release_date).getFullYear().toString() : '',
+            displayRuntime,
+            overview: item.overview || '',
+            backdrop_path: item.backdrop_path || '',
+            poster_path: item.poster_path || '',
+            vote_average: item.vote_average || 0,
+            ageRating,
+            logo_path: logoPath,
+            genres: detailsData.genres?.slice(0, 5) || [],
+            videos: videosData,
+            mediaType: 'movie' as const,
+            tmdbUrl: `https://www.themoviedb.org/movie/${item.id}`,
           };
         } catch (error) {
           console.error(`Error fetching details for ${item.id}:`, error);
-          return { ...item, videos: { results: [] }, ageRating: '', logo_path: '' };
+          return {
+            id: item.id,
+            displayTitle: item.title || 'Sin título',
+            displayYear: item.release_date ? new Date(item.release_date).getFullYear().toString() : '',
+            displayRuntime: '',
+            overview: item.overview || '',
+            backdrop_path: item.backdrop_path || '',
+            poster_path: item.poster_path || '',
+            vote_average: item.vote_average || 0,
+            ageRating: '',
+            logo_path: '',
+            genres: [],
+            videos: { results: [] },
+            mediaType: 'movie' as const,
+            tmdbUrl: `https://www.themoviedb.org/movie/${item.id}`,
+          };
         }
       })
     );
@@ -144,7 +181,14 @@ async function MoviesContent() {
     );
   }
 
-  return <HeroCarouselMovies movies={movies} autoPlayInterval={8000} trailerDelay={5000} />;
+  return (
+    <HeroCarousel
+      items={movies}
+      mediaType="movie"
+      autoPlayInterval={8000}
+      trailerDelay={5000}
+    />
+  );
 }
 
 export default function Page() {

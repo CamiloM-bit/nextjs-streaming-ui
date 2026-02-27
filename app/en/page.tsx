@@ -4,7 +4,8 @@ import HeroCarousel from "@/app/components/hero/HeroCarousel";
 import MediaLoader from "@/app/components/loaders/MediaLoader";
 
 export const metadata: Metadata = {
-  title: "Home ",
+  title: "Home",
+
 };
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
@@ -17,13 +18,8 @@ interface Video {
   site: string;
   type: string;
   official: boolean;
-}
-
-interface Season {
-  id: number;
-  name: string;
-  season_number: number;
-  episode_count: number;
+  iso_639_1?: string;
+  iso_3166_1?: string;
 }
 
 interface Genre {
@@ -31,28 +27,25 @@ interface Genre {
   name: string;
 }
 
-interface Movie {
+// Interfaz que espera el HeroCarousel
+interface CarouselItem {
   id: number;
-  title: string;
-  name?: string;
+  displayTitle: string;
+  displayYear: string;
+  displayRuntime: string;
   overview: string;
   backdrop_path: string;
   poster_path: string;
   vote_average: number;
-  release_date?: string;
-  first_air_date?: string;
-  videos?: { results: Video[] };
-  media_type?: 'movie' | 'tv';
-  number_of_seasons?: number;
-  number_of_episodes?: number;
-  seasons?: Season[];
-  runtime?: number;
   ageRating?: string;
   logo_path?: string;
   genres?: Genre[];
+  videos?: { results: Video[] };
+  mediaType: 'movie' | 'tv';
+  tmdbUrl: string;
 }
 
-async function getTrendingMovies(): Promise<Movie[]> {
+async function getTrendingMixed(): Promise<CarouselItem[]> {
   try {
     if (!TMDB_API_KEY) { 
       console.error('TMDB_API_KEY no está configurada');
@@ -75,18 +68,18 @@ async function getTrendingMovies(): Promise<Movie[]> {
       return [];
     }
 
-    const moviesWithDetails = await Promise.all(
+    const itemsWithDetails = await Promise.all(
       trendingData.results.slice(0, 5).map(async (item: any) => {
-        const isTV = item.media_type === 'tv';
-        const endpoint = isTV ? 'tv' : 'movie';
+        const mediaType = item.media_type || 'movie';
+        const isMovie = mediaType === 'movie';
         
         try {
           const [videosRes, detailsRes, imagesRes] = await Promise.all([
-            fetch(`${TMDB_BASE_URL}/${endpoint}/${item.id}/videos?api_key=${TMDB_API_KEY}&language=es-ES&include_video_language=en,es`, 
+            fetch(`${TMDB_BASE_URL}/${mediaType}/${item.id}/videos?api_key=${TMDB_API_KEY}&language=es-ES&include_video_language=en,es`, 
               { next: { revalidate: 86400 }, cache: 'force-cache' }),
-            fetch(`${TMDB_BASE_URL}/${endpoint}/${item.id}?api_key=${TMDB_API_KEY}&language=es-ES`, 
+            fetch(`${TMDB_BASE_URL}/${mediaType}/${item.id}?api_key=${TMDB_API_KEY}&language=es-ES`, 
               { next: { revalidate: 3600 }, cache: 'force-cache' }),
-            fetch(`${TMDB_BASE_URL}/${endpoint}/${item.id}/images?api_key=${TMDB_API_KEY}`, 
+            fetch(`${TMDB_BASE_URL}/${mediaType}/${item.id}/images?api_key=${TMDB_API_KEY}`, 
               { next: { revalidate: 86400 }, cache: 'force-cache' })
           ]);
 
@@ -99,55 +92,88 @@ async function getTrendingMovies(): Promise<Movie[]> {
           const enLogo = logos.find((l: any) => l.iso_639_1 === 'en');
           const logoPath = esLogo?.file_path || enLogo?.file_path || logos[0]?.file_path || '';
 
-          let extraDetails: any = {};
-          if (isTV) {
-            extraDetails = {
-              number_of_seasons: detailsData.number_of_seasons,
-              number_of_episodes: detailsData.number_of_episodes,
-              seasons: detailsData.seasons?.filter((s: Season) => s.season_number > 0) || [],
-              genres: detailsData.genres?.slice(0, 5) || [],
-            };
-          } else {
-            extraDetails = {
-              runtime: detailsData.runtime,
-              genres: detailsData.genres?.slice(0, 5) || [],
-            };
-          }
-
           let ageRating = '';
           try {
-            if (isTV) {
-              const contentRes = await fetch(`${TMDB_BASE_URL}/tv/${item.id}/content_ratings?api_key=${TMDB_API_KEY}`, 
-                { next: { revalidate: 86400 }, cache: 'force-cache' });
-              if (contentRes.ok) {
-                const data = await contentRes.json();
-                const rating = data.results?.find((r: any) => r.iso_3166_1 === 'ES')?.rating || 
-                              data.results?.find((r: any) => r.iso_3166_1 === 'US')?.rating || '';
-                ageRating = convertToAgeFormat(rating);
-              }
-            } else {
-              const releaseRes = await fetch(`${TMDB_BASE_URL}/movie/${item.id}/release_dates?api_key=${TMDB_API_KEY}`, 
-                { next: { revalidate: 86400 }, cache: 'force-cache' });
-              if (releaseRes.ok) {
-                const data = await releaseRes.json();
+            const ratingUrl = isMovie 
+              ? `${TMDB_BASE_URL}/movie/${item.id}/release_dates?api_key=${TMDB_API_KEY}`
+              : `${TMDB_BASE_URL}/tv/${item.id}/content_ratings?api_key=${TMDB_API_KEY}`;
+            const ratingRes = await fetch(ratingUrl, { next: { revalidate: 86400 }, cache: 'force-cache' });
+            
+            if (ratingRes.ok) {
+              const data = await ratingRes.json();
+              if (isMovie) {
                 const cert = data.results?.find((r: any) => r.iso_3166_1 === 'ES')?.release_dates?.find((d: any) => d.certification)?.certification ||
                             data.results?.find((r: any) => r.iso_3166_1 === 'US')?.release_dates?.find((d: any) => d.certification)?.certification || '';
                 ageRating = convertToAgeFormat(cert);
+              } else {
+                const rating = data.results?.find((r: any) => r.iso_3166_1 === 'ES')?.rating ||
+                              data.results?.find((r: any) => r.iso_3166_1 === 'US')?.rating || '';
+                ageRating = convertToAgeFormat(rating);
               }
             }
           } catch (e) { console.error(e); }
 
-          return { ...item, videos: videosData, ageRating, logo_path: logoPath, ...extraDetails };
+          // Formatear según tipo
+          let displayRuntime = '';
+          if (isMovie) {
+            const runtime = detailsData.runtime || 0;
+            if (runtime > 0) {
+              const hours = Math.floor(runtime / 60);
+              const mins = runtime % 60;
+              displayRuntime = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+            }
+          } else {
+            const seasons = detailsData.number_of_seasons || 0;
+            if (seasons > 0) {
+              displayRuntime = `${seasons} Temporada${seasons > 1 ? 's' : ''}`;
+            }
+          }
+
+          return {
+            id: item.id,
+            displayTitle: isMovie ? (item.title || 'Sin título') : (item.name || 'Sin título'),
+            displayYear: isMovie 
+              ? (item.release_date ? new Date(item.release_date).getFullYear().toString() : '')
+              : (item.first_air_date ? new Date(item.first_air_date).getFullYear().toString() : ''),
+            displayRuntime,
+            overview: item.overview || '',
+            backdrop_path: item.backdrop_path || '',
+            poster_path: item.poster_path || '',
+            vote_average: item.vote_average || 0,
+            ageRating,
+            logo_path: logoPath,
+            genres: detailsData.genres?.slice(0, 5) || [],
+            videos: videosData,
+            mediaType: mediaType as 'movie' | 'tv',
+            tmdbUrl: `https://www.themoviedb.org/${mediaType}/${item.id}`,
+          };
         } catch (error) {
           console.error(`Error fetching details for ${item.id}:`, error);
-          return { ...item, videos: { results: [] }, ageRating: '', logo_path: '' };
+          return {
+            id: item.id,
+            displayTitle: isMovie ? (item.title || 'Sin título') : (item.name || 'Sin título'),
+            displayYear: isMovie 
+              ? (item.release_date ? new Date(item.release_date).getFullYear().toString() : '')
+              : (item.first_air_date ? new Date(item.first_air_date).getFullYear().toString() : ''),
+            displayRuntime: '',
+            overview: item.overview || '',
+            backdrop_path: item.backdrop_path || '',
+            poster_path: item.poster_path || '',
+            vote_average: item.vote_average || 0,
+            ageRating: '',
+            logo_path: '',
+            genres: [],
+            videos: { results: [] },
+            mediaType: mediaType as 'movie' | 'tv',
+            tmdbUrl: `https://www.themoviedb.org/${mediaType}/${item.id}`,
+          };
         }
       })
     );
 
-    return moviesWithDetails;
+    return itemsWithDetails;
   } catch (error) {
-    console.error('Error en getTrendingMovies:', error);
+    console.error('Error en getTrendingMixed:', error);
     return [];
   }
 }
@@ -166,30 +192,36 @@ function convertToAgeFormat(cert: string): string {
 }
 
 async function HomeContent() {
-  const movies = await getTrendingMovies();
+  const items = await getTrendingMixed();
   
-  if (!movies || movies.length === 0) {
+  if (!items || items.length === 0) {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">No se pudieron cargar las películas</h1>
+          <h1 className="text-2xl font-bold mb-4">No se pudo cargar el contenido</h1>
           <p className="text-gray-400">Verifica tu conexión y la API key de TMDB</p>
         </div>
       </div>
     );
   }
 
+  // Para home usamos 'movie' como default, pero cada item tiene su mediaType
   return (
-     <div className="w-full h-auto">
-          <HeroCarousel movies={movies} autoPlayInterval={8000} trailerDelay={5000} />
-     </div>
+    <HeroCarousel
+      items={items}
+      mediaType="movie"
+      autoPlayInterval={8000}
+      trailerDelay={5000}
+    />
   );
 }
 
 export default function Page() {
   return (
-    <Suspense fallback={<MediaLoader type="movies" />}>
-      <HomeContent />
-    </Suspense>
+    <main className="min-h-screen bg-black">
+      <Suspense fallback={<MediaLoader type="movies" />}>
+        <HomeContent />
+      </Suspense>
+    </main>
   );
 }

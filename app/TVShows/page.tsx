@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
-import HeroCarouselSeries from "@/app/components/hero/HeroCarouselSeries";
+import { Suspense } from "react";
+import HeroCarousel from "@/app/components/hero/HeroCarousel";
+import MediaLoader from "@/app/components/loaders/MediaLoader";
 
 export const metadata: Metadata = {
-  title: "Series",
+  title: "Series | Moonlight",
 };
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
@@ -15,6 +17,8 @@ interface Video {
   site: string;
   type: string;
   official: boolean;
+  iso_639_1?: string;
+  iso_3166_1?: string;
 }
 
 interface Season {
@@ -29,26 +33,27 @@ interface Genre {
   name: string;
 }
 
-interface Series {
+// Interfaz que espera el HeroCarousel
+interface CarouselItem {
   id: number;
-  name: string;
+  displayTitle: string;
+  displayYear: string;
+  displayRuntime: string;
   overview: string;
   backdrop_path: string;
   poster_path: string;
   vote_average: number;
-  first_air_date: string;
-  videos?: { results: Video[] };
-  number_of_seasons?: number;
-  number_of_episodes?: number;
-  seasons?: Season[];
   ageRating?: string;
   logo_path?: string;
   genres?: Genre[];
+  videos?: { results: Video[] };
+  mediaType: 'tv';
+  tmdbUrl: string;
 }
 
-async function getTrendingSeries(): Promise<Series[]> {
+async function getTrendingSeries(): Promise<CarouselItem[]> {
   try {
-    if (!TMDB_API_KEY) { 
+    if (!TMDB_API_KEY) {
       console.error('TMDB_API_KEY no está configurada');
       return [];
     }
@@ -73,11 +78,11 @@ async function getTrendingSeries(): Promise<Series[]> {
       trendingData.results.slice(0, 5).map(async (item: any) => {
         try {
           const [videosRes, detailsRes, imagesRes] = await Promise.all([
-            fetch(`${TMDB_BASE_URL}/tv/${item.id}/videos?api_key=${TMDB_API_KEY}&language=es-ES&include_video_language=en,es`, 
+            fetch(`${TMDB_BASE_URL}/tv/${item.id}/videos?api_key=${TMDB_API_KEY}&language=es-ES&include_video_language=en,es`,
               { next: { revalidate: 86400 }, cache: 'force-cache' }),
-            fetch(`${TMDB_BASE_URL}/tv/${item.id}?api_key=${TMDB_API_KEY}&language=es-ES`, 
+            fetch(`${TMDB_BASE_URL}/tv/${item.id}?api_key=${TMDB_API_KEY}&language=es-ES`,
               { next: { revalidate: 3600 }, cache: 'force-cache' }),
-            fetch(`${TMDB_BASE_URL}/tv/${item.id}/images?api_key=${TMDB_API_KEY}`, 
+            fetch(`${TMDB_BASE_URL}/tv/${item.id}/images?api_key=${TMDB_API_KEY}`,
               { next: { revalidate: 86400 }, cache: 'force-cache' })
           ]);
 
@@ -92,29 +97,55 @@ async function getTrendingSeries(): Promise<Series[]> {
 
           let ageRating = '';
           try {
-            const contentRes = await fetch(`${TMDB_BASE_URL}/tv/${item.id}/content_ratings?api_key=${TMDB_API_KEY}`, 
+            const contentRes = await fetch(`${TMDB_BASE_URL}/tv/${item.id}/content_ratings?api_key=${TMDB_API_KEY}`,
               { next: { revalidate: 86400 }, cache: 'force-cache' });
             if (contentRes.ok) {
               const data = await contentRes.json();
-              const rating = data.results?.find((r: any) => r.iso_3166_1 === 'ES')?.rating || 
-                            data.results?.find((r: any) => r.iso_3166_1 === 'US')?.rating || '';
+              const rating = data.results?.find((r: any) => r.iso_3166_1 === 'ES')?.rating ||
+                data.results?.find((r: any) => r.iso_3166_1 === 'US')?.rating || '';
               ageRating = convertToAgeFormat(rating);
             }
           } catch (e) { console.error(e); }
 
-          return { 
-            ...item, 
-            videos: videosData, 
-            ageRating, 
+          // Formatear para el carousel
+          const numberOfSeasons = detailsData.number_of_seasons || 0;
+          
+          return {
+            id: item.id,
+            displayTitle: item.name || 'Sin título',
+            displayYear: item.first_air_date ? new Date(item.first_air_date).getFullYear().toString() : '',
+            displayRuntime: numberOfSeasons > 0 
+              ? `${numberOfSeasons} Temporada${numberOfSeasons > 1 ? 's' : ''}` 
+              : '',
+            overview: item.overview || '',
+            backdrop_path: item.backdrop_path || '',
+            poster_path: item.poster_path || '',
+            vote_average: item.vote_average || 0,
+            ageRating,
             logo_path: logoPath,
-            number_of_seasons: detailsData.number_of_seasons,
-            number_of_episodes: detailsData.number_of_episodes,
-            seasons: detailsData.seasons?.filter((s: Season) => s.season_number > 0) || [],
-            genres: detailsData.genres?.slice(0, 5) || []
+            genres: detailsData.genres?.slice(0, 5) || [],
+            videos: videosData,
+            mediaType: 'tv' as const,
+            tmdbUrl: `https://www.themoviedb.org/tv/${item.id}`,
           };
         } catch (error) {
           console.error(`Error fetching details for ${item.id}:`, error);
-          return { ...item, videos: { results: [] }, ageRating: '', logo_path: '' };
+          return {
+            id: item.id,
+            displayTitle: item.name || 'Sin título',
+            displayYear: item.first_air_date ? new Date(item.first_air_date).getFullYear().toString() : '',
+            displayRuntime: '',
+            overview: item.overview || '',
+            backdrop_path: item.backdrop_path || '',
+            poster_path: item.poster_path || '',
+            vote_average: item.vote_average || 0,
+            ageRating: '',
+            logo_path: '',
+            genres: [],
+            videos: { results: [] },
+            mediaType: 'tv' as const,
+            tmdbUrl: `https://www.themoviedb.org/tv/${item.id}`,
+          };
         }
       })
     );
@@ -139,9 +170,9 @@ function convertToAgeFormat(cert: string): string {
   return ageMap[cert] || cert;
 }
 
-export default async function Page() {
+async function SeriesContent() {
   const series = await getTrendingSeries();
-  
+
   if (!series || series.length === 0) {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
@@ -154,8 +185,19 @@ export default async function Page() {
   }
 
   return (
-     <div className="w-full h-auto">
-          <HeroCarouselSeries series={series} autoPlayInterval={8000} trailerDelay={5000} />
-     </div>
+    <HeroCarousel
+      items={series}
+      mediaType="tv"
+      autoPlayInterval={8000}
+      trailerDelay={5000}
+    />
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<MediaLoader type="series" />}>
+      <SeriesContent />
+    </Suspense>
   );
 }
