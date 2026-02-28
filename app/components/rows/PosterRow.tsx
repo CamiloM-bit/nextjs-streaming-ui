@@ -102,7 +102,7 @@ export default function PosterRow({
             return (
               <div
                 key={item.id}
-                className="relative flex-none w-[calc(100%/2)] sm:w-[calc(100%/3)] md:w-[calc(100%/4)] lg:w-[calc(100%/5)] xl:w-[calc(100%/6)] aspect-[2/3] cursor-pointer transition-all duration-300 ease-out"
+                className="relative flex-none w-[calc(100%/2)] sm:w-[calc(100%/3)] md:w-[calc(100%/4)] lg:w-[calc(100%/5)] xl:w-[calc(100%/6)] aspect-2/3 cursor-pointer transition-all duration-300 ease-out"
                 style={{
                   transform: isHovered ? 'scale(1.3) translateY(-10px)' : 'scale(1)',
                   zIndex: isHovered ? 50 : 10,
@@ -135,7 +135,7 @@ export default function PosterRow({
                           alt={item.title}
                           className="w-full h-full object-cover"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                        <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent" />
                       </div>
 
                       {/* Info */}
