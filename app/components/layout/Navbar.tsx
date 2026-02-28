@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import Notificacion from '@/app/components/Notification'
 import Search from '@/app/components/Search'
-import "../globals.css";
+import "../../globals.css";
 
 
 
