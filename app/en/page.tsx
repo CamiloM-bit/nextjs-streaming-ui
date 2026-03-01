@@ -207,12 +207,12 @@ async function HomeContent() {
 
   // Para home usamos 'movie' como default, pero cada item tiene su mediaType
   return (
-    <HeroCarousel
-      items={items}
-      mediaType="movie"
-      autoPlayInterval={8000}
-      trailerDelay={5000}
-    />
+      <HeroCarousel
+        items={items}
+        mediaType="movie"
+        autoPlayInterval={8000}
+        trailerDelay={5000}
+      />
   );
 }
 
