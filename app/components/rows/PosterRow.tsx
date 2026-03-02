@@ -206,7 +206,7 @@ export default function PosterRow({
               return (
                 <div
                   key={`${item.id}-${index}`}
-                  className="relative flex-none w-[calc(100%/2)] sm:w-[calc(100%/3)] md:w-[calc(100%/4)] lg:w-[calc(100%/5)] xl:w-[calc(100%/6)] aspect-[2/3] cursor-pointer transition-all duration-300 ease-out snap-start"
+                  className="relative flex-none w-[calc(100%/2)] sm:w-[calc(100%/3)] md:w-[calc(100%/4)] lg:w-[calc(100%/5)] xl:w-[calc(100%/6)] aspect-2/3 cursor-pointer transition-all duration-300 ease-out snap-start"
                   style={{
                     transform: isHovered ? 'scale(1.3) translateY(-10px)' : 'scale(1)',
                     zIndex: isHovered ? 50 : 10,
@@ -230,7 +230,7 @@ export default function PosterRow({
                       </div>
                     )}
                     
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2 opacity-0 hover:opacity-100 transition-opacity">
+                    <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/90 to-transparent p-2 opacity-0 hover:opacity-100 transition-opacity">
                       <p className="text-white text-xs font-semibold truncate">{item.title}</p>
                       {duration && (
                         <p className="text-gray-300 text-[10px] flex items-center gap-1">
@@ -248,7 +248,7 @@ export default function PosterRow({
                             alt={item.title}
                             className="w-full h-full object-cover"
                           />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                          <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent" />
                         </div>
 
                         <div className="space-y-2">
@@ -302,7 +302,7 @@ export default function PosterRow({
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-[100] bg-black/95 overflow-y-auto">
+        <div className="fixed inset-0 z-100 bg-black/95 overflow-y-auto">
           <div className="sticky top-0 z-10 bg-black/80 backdrop-blur-md border-b border-white/10 px-6 py-4 flex items-center justify-between">
             <h2 className="text-2xl font-bold text-white">{title}</h2>
             <button 
@@ -321,7 +321,7 @@ export default function PosterRow({
                 return (
                   <div
                     key={`modal-${item.id}`}
-                    className="relative aspect-[2/3] cursor-pointer group/item"
+                    className="relative aspect-2/3 cursor-pointer group/item"
                     onClick={() => window.open(`https://www.themoviedb.org/${item.mediaType}/${item.id}`, '_blank')}
                   >
                     <img
@@ -352,7 +352,7 @@ export default function PosterRow({
             </div>
           </div>
 
-          <div className="sticky bottom-0 bg-gradient-to-t from-black to-transparent h-20 pointer-events-none" />
+          <div className="sticky bottom-0 bg-linear-to-t from-black to-transparent h-20 pointer-events-none" />
         </div>
       )}
     </>
