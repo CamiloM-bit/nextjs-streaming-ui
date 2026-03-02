@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import HeroCarousel from "@/app/components/hero/HeroCarousel";
+import PosterRow from "@/app/components/rows/PosterRow"; // ← IMPORTAR
 import MediaLoader from "@/app/components/ui/loaders/MediaLoader";
 
 export const metadata: Metadata = {
@@ -42,6 +43,21 @@ interface CarouselItem {
   videos?: { results: Video[] };
   mediaType: 'movie';
   tmdbUrl: string;
+}
+
+// Interfaz que espera PosterRow (necesaria para la conversión)
+interface PosterItem {
+  id: number;
+  title: string;
+  poster_path: string;
+  backdrop_path?: string;
+  vote_average: number;
+  releaseYear: string;
+  duration: string;
+  ageRating?: string;
+  overview: string;
+  genres?: Genre[];
+  mediaType: 'movie' | 'tv';
 }
 
 async function getTrendingMovies(): Promise<CarouselItem[]> {
@@ -154,6 +170,55 @@ async function getTrendingMovies(): Promise<CarouselItem[]> {
   }
 }
 
+// NUEVA FUNCIÓN: Obtener películas populares para el PosterRow
+async function getPopularMovies(): Promise<PosterItem[]> {
+  try {
+    if (!TMDB_API_KEY) {
+      console.error('TMDB_API_KEY no está configurada');
+      return [];
+    }
+
+    const res = await fetch(
+      `${TMDB_BASE_URL}/movie/popular?api_key=${TMDB_API_KEY}&language=es-ES&page=1`,
+      { next: { revalidate: 3600 }, cache: 'force-cache' }
+    );
+
+    if (!res.ok) {
+      console.error('Error fetching popular movies:', res.status);
+      return [];
+    }
+
+    const data = await res.json();
+
+    if (!data.results || data.results.length === 0) {
+      return [];
+    }
+
+    // Mapear directamente a PosterItem (sin necesidad de videos/logos complejos)
+    const movies: PosterItem[] = data.results.map((item: any) => {
+      // Calcular duración si está disponible (opcional, PosterRow la fetchará luego)
+      return {
+        id: item.id,
+        title: item.title || 'Sin título',
+        poster_path: item.poster_path || '',
+        backdrop_path: item.backdrop_path || '',
+        vote_average: item.vote_average || 0,
+        releaseYear: item.release_date ? new Date(item.release_date).getFullYear().toString() : '',
+        duration: '', // PosterRow lo calculará con fetchItemDetails
+        ageRating: '', // Opcional, puedes añadir lógica similar a getTrendingMovies si quieres
+        overview: item.overview || '',
+        genres: item.genre_ids?.map((id: number) => ({ id, name: '' })) || [], // Simplificado
+        mediaType: 'movie' as const,
+      };
+    });
+
+    return movies;
+  } catch (error) {
+    console.error('Error en getPopularMovies:', error);
+    return [];
+  }
+}
+
 function convertToAgeFormat(cert: string): string {
   if (!cert) return '';
   const ageMap: { [key: string]: string } = {
@@ -168,7 +233,11 @@ function convertToAgeFormat(cert: string): string {
 }
 
 async function MoviesContent() {
-  const movies = await getTrendingMovies();
+  // Obtener datos en paralelo
+  const [movies, popularMovies] = await Promise.all([
+    getTrendingMovies(),
+    getPopularMovies()
+  ]);
   
   if (!movies || movies.length === 0) {
     return (
@@ -182,12 +251,27 @@ async function MoviesContent() {
   }
 
   return (
-    <HeroCarousel
-      items={movies}
-      mediaType="movie"
-      autoPlayInterval={8000}
-      trailerDelay={5000}
-    />
+    <div className="bg-black min-h-screen">
+      {/* HeroCarousel existente - SIN CAMBIOS */}
+      <HeroCarousel
+        items={movies}
+        mediaType="movie"
+        autoPlayInterval={8000}
+        trailerDelay={5000}
+      />
+      
+      {/* NUEVO: PosterRow debajo del HeroCarousel */}
+      <div className="relative z-20 -mt-20"> {/* -mt-20 para solapamiento estilo Netflix */}
+        <PosterRow
+          title="Populares en Moonlight"
+          items={popularMovies}
+          mediaType="movie"
+          visibleItems={6}
+        />
+      </div>
+      
+      {/* Puedes añadir más PosterRows aquí */}
+    </div>
   );
 }
 
