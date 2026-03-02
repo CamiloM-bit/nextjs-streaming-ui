@@ -24,7 +24,7 @@ export default function Navbar() {
   }, [pathname])
 
   return (<>
-    <header className="flex items-center  border-orange-800  fixed pl-7  h-[12%] w-full z-10 " >
+    <header className="flex items-center  border-orange-800  fixed pl-7  h-[12%] w-full z-20 " >
       <div className=" border-red-800  flex-1 h-full">
         <div className=" border-orange-500 h-full w-[50%] content-center"> {/* Logo Container */}
           <div>
@@ -35,32 +35,32 @@ export default function Navbar() {
         </div>
       </div>
       {<nav className=" border-blue-400  h-full w-[50%]  content-center pl-6">
-        <Link href="/en" onFocus={() => {
-          setActive("/en")           // cambia visual Rapido 
-          router.replace("/en")       // Remplaza la ruta real 
+        <Link href="/es" onFocus={() => {
+          setActive("/es")           // cambia visual Rapido 
+          router.replace("/es")       // Remplaza la ruta real 
         }}
           className={`outline-0 p-1.5 px-3 relative text-gray-300  transition
-          ${active === "/en"
+          ${active === "/es"
               ? " text-white"
               : "hover:text-white"}`}>
           Home
 
         </Link> {" "} {/* {""} ----> Generacion de espacios */}
         {" "}
-        <Link href="/TVShows" onFocus={() => {
-          setActive("/TVShows")
-          router.replace("/TVShows")
+        <Link href="/Series" onFocus={() => {
+          setActive("/Series")
+          router.replace("/Series")
         }}
           className={`outline-0 p-1.5 px-3 text-gray-300 transition
-          ${active === "/TVShows"
+          ${active === "/Series"
               ? " text-white"
               : "hover:text-white"}`}> TV Shows</Link> {" "}
-        <Link href="/Movies" onFocus={() => {
-          setActive("/Movies")
-          router.replace("/Movies")
+        <Link href="/Peliculas" onFocus={() => {
+          setActive("/Peliculas")
+          router.replace("/Peliculas")
         }}
           className={`outline-0 p-1.5 px-3  text-gray-300 transition
-          ${active === "/Movies"
+          ${active === "/Peliculas"
               ? " text-white"
               : "hover:text-white"}`}>Movies</Link>
 
