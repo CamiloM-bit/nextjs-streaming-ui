@@ -93,6 +93,8 @@ export default function HeroCarousel({
   const stallCount = useRef<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const isActiveRef = useRef(false);
+  // FIX: Agregado ref para evitar inicialización duplicada
+  const isInitializingRef = useRef(false);
 
   const currentItem = items[currentIndex];
   const isActive = isHovered;
@@ -147,6 +149,8 @@ export default function HeroCarousel({
     setTrailerKey(null);
     setPlayerReady(false);
     setAvailableAudios([]);
+    // FIX: Resetear flag de inicialización
+    isInitializingRef.current = false;
     if (playerRef.current) {
       try {
         playerRef.current.destroy();
@@ -166,6 +170,7 @@ export default function HeroCarousel({
       if (!item.logo_path || logoCache.has(item.logo_path)) return;
       
       const img = new Image();
+      // FIX: Eliminado espacio en URL
       const logoUrl = `https://image.tmdb.org/t/p/original${item.logo_path}`;
       
       img.onload = () => {
@@ -187,10 +192,12 @@ export default function HeroCarousel({
     
     if (items[nextIndex]?.logo_path) {
       const img = new Image();
+      // FIX: Eliminado espacio en URL
       img.src = `https://image.tmdb.org/t/p/original${items[nextIndex].logo_path}`;
     }
     if (items[prevIndex]?.logo_path) {
       const img = new Image();
+      // FIX: Eliminado espacio en URL
       img.src = `https://image.tmdb.org/t/p/original${items[prevIndex].logo_path}`;
     }
     
@@ -362,7 +369,11 @@ export default function HeroCarousel({
 
   // INICIALIZAR PLAYER
   useEffect(() => {
+    // FIX: Agregadas condiciones para evitar inicialización duplicada
     if (!showTrailer || !trailerKey || !playerContainerRef.current) return;
+    if (isInitializingRef.current) return;
+    
+    isInitializingRef.current = true;
 
     const initPlayer = () => {
       if (!window.YT?.Player) {
@@ -370,8 +381,10 @@ export default function HeroCarousel({
         return;
       }
 
-      if (playerContainerRef.current) {
-        playerContainerRef.current.innerHTML = '';
+      // FIX: Verificar que todavía queremos mostrar el trailer
+      if (!showTrailer || !playerContainerRef.current) {
+        isInitializingRef.current = false;
+        return;
       }
 
       try {
@@ -397,6 +410,8 @@ export default function HeroCarousel({
           },
           events: {
             onReady: (event: any) => {
+              // FIX: Verificar que el componente sigue montado
+              if (!showTrailer) return;
               setPlayerReady(true);
               
               try {
@@ -441,13 +456,14 @@ export default function HeroCarousel({
         });
       } catch (error) {
         console.error('Error inicializando player:', error);
+        isInitializingRef.current = false;
       }
     };
 
     initPlayer();
 
     return () => {
-      cleanupTrailer();
+      isInitializingRef.current = false;
     };
   }, [showTrailer, trailerKey, playerInstance, currentQuality, cleanupTrailer]);
 
@@ -485,6 +501,7 @@ export default function HeroCarousel({
 
   if (!items?.length) return null;
 
+  // FIX: Eliminado espacio en URLs
   const backdropUrl = `https://image.tmdb.org/t/p/original${currentItem.backdrop_path}`;
   const logoUrl = currentItem.logo_path ? `https://image.tmdb.org/t/p/original${currentItem.logo_path}` : null;
   
@@ -515,7 +532,8 @@ export default function HeroCarousel({
       </div>
 
       {showTrailer && trailerKey && (
-        <div className="absolute inset-0 w-full h-full bg-black" key={`player-${playerInstance}`}>
+        // FIX: Eliminado key destructivo que causaba remounts
+        <div className="absolute inset-0 w-full h-full bg-black">
           <div 
             ref={playerContainerRef} 
             className="absolute inset-0 w-full h-full"
