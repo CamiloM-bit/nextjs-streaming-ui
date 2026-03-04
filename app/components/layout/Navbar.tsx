@@ -26,10 +26,10 @@ export default function Navbar() {
   return (<>
     <header className="flex items-center  border-orange-800  fixed pl-7  h-[12%] w-full z-20 " >
       <div className=" border-red-800  flex-1 h-full">
-        <div className=" border-orange-500 h-full w-[50%] content-center"> {/* Logo Container */}
-          <div>
-            <figure className="border border-red-500 m-1.5 flex justify-center w-25">
-              <img className="text-center object-contain w-75" src="Nextify.svg" alt="Logo"  />
+        <div className="relative  border-orange-500 h-full w-[50%] content-center"> {/* Logo Container */}
+          <div className="  border-blue-500 h-full overflow-hidden">
+            <figure className="absolute  border-red-500 h-full  flex justify-center">
+              <img className="relative text-center object-cover w-[100vh] h-full " src="Nextify.svg" alt="Logo"  />
             </figure>
           </div>
         </div>
