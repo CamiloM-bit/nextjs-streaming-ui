@@ -270,10 +270,10 @@ export default function PosterRow({
 
         <div className="relative group/slider">
           {/* Sombra izquierda */}
-          <div className={`absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-black via-black/80 to-transparent z-20 pointer-events-none transition-opacity duration-500 ${isAtStart ? 'opacity-0' : 'opacity-100'}`} />
+          <div className={`absolute left-0 top-0 bottom-0 w-24 bg-linear-to-r from-black via-black/80 to-transparent z-20 pointer-events-none transition-opacity duration-500 ${isAtStart ? 'opacity-0' : 'opacity-100'}`} />
           
           {/* Sombra derecha */}
-          <div className={`absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-black via-black/80 to-transparent z-20 pointer-events-none transition-opacity duration-500 ${isAtEnd ? 'opacity-0' : 'opacity-100'}`} />
+          <div className={`absolute right-0 top-0 bottom-0 w-24 bg-linear-to-l from-black via-black/80 to-transparent z-20 pointer-events-none transition-opacity duration-500 ${isAtEnd ? 'opacity-0' : 'opacity-100'}`} />
 
           <button
             onClick={() => scrollToItem('left')}
