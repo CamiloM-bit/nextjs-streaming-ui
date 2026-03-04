@@ -43,22 +43,108 @@ export default function PosterRow({
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [itemDetails, setItemDetails] = useState<Map<number, { runtime?: number; number_of_seasons?: number; overview?: string }>>(new Map());
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isAtStart, setIsAtStart] = useState(true);
+  const [isAtEnd, setIsAtEnd] = useState(false);
 
-  const displayItems = items.slice(0, 15);
+  // Crear array infinito duplicando items
+  const infiniteItems = [...items, ...items, ...items];
+  const displayItems = infiniteItems.slice(0, 45); // 15 * 3 para el loop
+
+  const getItemWidth = useCallback(() => {
+    if (!rowRef.current) return 0;
+    const container = rowRef.current;
+    const firstItem = container.querySelector('[data-item-index]') as HTMLElement;
+    return firstItem ? firstItem.offsetWidth + 8 : 0; // 8px gap
+  }, []);
+
+  const checkPosition = useCallback(() => {
+    if (!rowRef.current) return;
+    const container = rowRef.current;
+    const scrollLeft = container.scrollLeft;
+    const itemWidth = getItemWidth();
+    const maxScroll = container.scrollWidth - container.clientWidth;
+    const threshold = 10;
+    
+    // Posición del primer item original (después de los clones del final)
+    const startPosition = items.length * itemWidth;
+    // Posición del último item original (antes de los clones del inicio)
+    const endPosition = (items.length * 2 - visibleItems) * itemWidth;
+    
+    setIsAtStart(scrollLeft <= startPosition + threshold);
+    setIsAtEnd(scrollLeft >= endPosition - threshold);
+  }, [items.length, visibleItems, getItemWidth]);
 
   const scrollToItem = useCallback((direction: 'left' | 'right') => {
     if (!rowRef.current) return;
     
+    const itemWidth = getItemWidth();
     const container = rowRef.current;
-    const scrollAmount = container.clientWidth * 0.9;
+    const maxIndex = items.length;
     
-    container.scrollTo({ 
-      left: direction === 'left' 
-        ? container.scrollLeft - scrollAmount 
-        : container.scrollLeft + scrollAmount, 
-      behavior: 'smooth' 
-    });
-  }, []);
+    let newIndex = direction === 'left' ? currentIndex - 1 : currentIndex + 1;
+    
+    // Loop infinito lógico
+    if (newIndex < 0) {
+      newIndex = maxIndex - 1;
+      // Saltar al final visualmente sin animación
+      container.style.scrollBehavior = 'auto';
+      const scrollPosition = (items.length * 2 - 1) * itemWidth;
+      container.scrollLeft = scrollPosition;
+      requestAnimationFrame(() => {
+        container.style.scrollBehavior = 'smooth';
+        container.scrollTo({
+          left: (items.length * 2 - 2) * itemWidth,
+          behavior: 'smooth'
+        });
+        setTimeout(() => checkPosition(), 50);
+      });
+    } else if (newIndex >= maxIndex) {
+      newIndex = 0;
+      // Saltar al inicio visualmente sin animación
+      container.style.scrollBehavior = 'auto';
+      container.scrollLeft = items.length * itemWidth;
+      requestAnimationFrame(() => {
+        container.style.scrollBehavior = 'smooth';
+        container.scrollTo({
+          left: (items.length + 1) * itemWidth,
+          behavior: 'smooth'
+        });
+        setTimeout(() => checkPosition(), 50);
+      });
+    } else {
+      const scrollPosition = (items.length + newIndex) * itemWidth;
+      container.scrollTo({
+        left: scrollPosition,
+        behavior: 'smooth'
+      });
+      setTimeout(() => checkPosition(), 300);
+    }
+    
+    setCurrentIndex(newIndex);
+  }, [currentIndex, items.length, getItemWidth, checkPosition]);
+
+  // Detectar scroll manual para actualizar estado de los botones
+  useEffect(() => {
+    const container = rowRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      checkPosition();
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [checkPosition]);
+
+  // Inicializar posición en el medio (segundo set de items)
+  useEffect(() => {
+    if (rowRef.current && items.length > 0) {
+      const itemWidth = getItemWidth();
+      rowRef.current.scrollLeft = items.length * itemWidth;
+      checkPosition();
+    }
+  }, [items.length, getItemWidth, checkPosition]);
 
   // Fetch detalles cuando se hace hover
   const fetchItemDetails = useCallback(async (item: PosterItem) => {
@@ -112,18 +198,22 @@ export default function PosterRow({
       switch(e.key) {
         case 'ArrowRight':
           e.preventDefault();
-          scrollToItem('right');
+          if (!isAtEnd) {
+            scrollToItem('right');
+          }
           break;
         case 'ArrowLeft':
           e.preventDefault();
-          scrollToItem('left');
+          if (!isAtStart) {
+            scrollToItem('left');
+          }
           break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isModalOpen, scrollToItem]);
+  }, [isModalOpen, scrollToItem, isAtStart, isAtEnd]);
 
   const getMatchPercent = (rating: number): string => {
     const match = Math.min(98, Math.round((rating / 10) * 100));
@@ -179,37 +269,59 @@ export default function PosterRow({
         </div>
 
         <div className="relative group/slider">
+          {/* Sombra izquierda */}
+          <div className={`absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-black via-black/80 to-transparent z-20 pointer-events-none transition-opacity duration-500 ${isAtStart ? 'opacity-0' : 'opacity-100'}`} />
+          
+          {/* Sombra derecha */}
+          <div className={`absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-black via-black/80 to-transparent z-20 pointer-events-none transition-opacity duration-500 ${isAtEnd ? 'opacity-0' : 'opacity-100'}`} />
+
           <button
             onClick={() => scrollToItem('left')}
-            className="absolute left-0 top-1/2 -translate-y-1/2 z-990 w-12 border-white border rounded-[100px] bg-black/50 hover:bg-black/70 flex items-center justify-center opacity-0 group-hover/slider:opacity-100 transition-opacity"
+            disabled={isAtStart}
+            className={`absolute left-0 top-1/2 -translate-y-1/2 z-30 w-12 border-white border rounded-[100px] flex items-center justify-center transition-all duration-300 ${
+              isAtStart 
+                ? 'opacity-30 cursor-not-allowed bg-black/30' 
+                : 'opacity-0 group-hover/slider:opacity-100 bg-black/50 hover:bg-black/70'
+            }`}
             style={{ height: '40px', width: '40px' }}
           >
-            <ChevronLeft className="w-8 h-8 text-white" />
+            <ChevronLeft className={`w-8 h-8 ${isAtStart ? 'text-gray-500' : 'text-white'}`} />
           </button>
 
           <button
             onClick={() => scrollToItem('right')}
-            className="absolute right-0 top-1/2 -translate-y-1/2  z-990 w-12  center border-white border rounded-[100px] bg-black/50 hover:bg-black/70 flex items-center justify-center opacity-0 group-hover/slider:opacity-100 transition-opacity"
+            disabled={isAtEnd}
+            className={`absolute right-0 top-1/2 -translate-y-1/2 z-30 w-12 border-white border rounded-[100px] flex items-center justify-center transition-all duration-300 ${
+              isAtEnd 
+                ? 'opacity-30 cursor-not-allowed bg-black/30' 
+                : 'opacity-0 group-hover/slider:opacity-100 bg-black/50 hover:bg-black/70'
+            }`}
             style={{ height: '40px', width: '40px' }}
           >
-            <ChevronRight className="w-8 h-8 text-white" />
+            <ChevronRight className={`w-8 h-8 ${isAtEnd ? 'text-gray-500' : 'text-white'}`} />
           </button>
 
           <div
             ref={rowRef}
-            className="flex gap-2 overflow-x-auto scrollbar-hide  scroll-smooth snap-x snap-mandatory"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth snap-x snap-mandatory"
+            style={{ 
+              scrollbarWidth: 'none', 
+              msOverflowStyle: 'none',
+              scrollBehavior: 'smooth'
+            }}
           >
             {displayItems.map((item, index) => {
               const isHovered = hoveredIndex === index;
               const duration = formatDuration(item);
               const details = itemDetails.get(item.id);
               const overview = details?.overview || item.overview;
+              const actualIndex = index % items.length;
               
               return (
                 <div
                   key={`${item.id}-${index}`}
-                  className="relative flex-none w-[calc(100%/2)] sm:w-[calc(100%/3)] md:w-[calc(100%/4)] lg:w-[calc(100%/5)] xl:w-[calc(100%/6)] aspect-2/3 cursor-pointer transition-all duration-300 ease-out snap-start"
+                  data-item-index={index}
+                  className="relative flex-none w-[calc(100%/2)] sm:w-[calc(100%/3)] md:w-[calc(100%/4)] lg:w-[calc(100%/5)] xl:w-[calc(100%/6)] aspect-2/3 cursor-pointer transition-all duration-500 ease-out snap-start"
                   style={{
                     transform: isHovered ? 'w-[100px]' : 'w-auto',
                     zIndex: isHovered ? 50 : 10,
@@ -226,10 +338,10 @@ export default function PosterRow({
                       loading="lazy"
                     />
                     
-                    {index < 10 && (
+                    {actualIndex < 10 && (
                       <div className="absolute -left-2 bottom-0 text-6xl font-black text-black/80 italic" 
                            style={{ WebkitTextStroke: '2px #4a4a4a' }}>
-                        {index + 1}
+                        {actualIndex + 1}
                       </div>
                     )}
                     
@@ -307,7 +419,7 @@ export default function PosterRow({
       </div>
 
       {isModalOpen && (
-        <div className="fixed z-50 h-full  bg-black/95 overflow-y-auto">
+        <div className="fixed z-50 h-full bg-black/95 overflow-y-auto">
           <div className="sticky top-0 z-10 bg-black/80 backdrop-blur-md border-b border-white/10 px-6 py-4 flex items-center justify-between">
             <h2 className="text-2xl font-bold text-white">{title}</h2>
             <button 
