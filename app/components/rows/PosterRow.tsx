@@ -42,7 +42,7 @@ export default function PosterRow({
   const rowRef = useRef<HTMLDivElement>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [itemDetails, setItemDetails] = useState<Map<number, { runtime?: number; number_of_seasons?: number }>>(new Map());
+  const [itemDetails, setItemDetails] = useState<Map<number, { runtime?: number; number_of_seasons?: number; overview?: string }>>(new Map());
 
   const displayItems = items.slice(0, 15);
 
@@ -74,6 +74,7 @@ export default function PosterRow({
       const details = {
         runtime: data.runtime,
         number_of_seasons: data.number_of_seasons,
+        overview: data.overview,
       };
       
       setItemDetails(prev => new Map(prev).set(item.id, details));
@@ -180,35 +181,37 @@ export default function PosterRow({
         <div className="relative group/slider">
           <button
             onClick={() => scrollToItem('left')}
-            className="absolute left-0 top-0 bottom-0 z-40 w-12 bg-black/50 hover:bg-black/70 flex items-center justify-center opacity-0 group-hover/slider:opacity-100 transition-opacity"
-            style={{ height: '100%' }}
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-990 w-12 border-white border rounded-[100px] bg-black/50 hover:bg-black/70 flex items-center justify-center opacity-0 group-hover/slider:opacity-100 transition-opacity"
+            style={{ height: '40px', width: '40px' }}
           >
             <ChevronLeft className="w-8 h-8 text-white" />
           </button>
 
           <button
             onClick={() => scrollToItem('right')}
-            className="absolute right-0 top-0 bottom-0 z-40 w-12 bg-black/50 hover:bg-black/70 flex items-center justify-center opacity-0 group-hover/slider:opacity-100 transition-opacity"
-            style={{ height: '100%' }}
+            className="absolute right-0 top-1/2 -translate-y-1/2  z-990 w-12  center border-white border rounded-[100px] bg-black/50 hover:bg-black/70 flex items-center justify-center opacity-0 group-hover/slider:opacity-100 transition-opacity"
+            style={{ height: '40px', width: '40px' }}
           >
             <ChevronRight className="w-8 h-8 text-white" />
           </button>
 
           <div
             ref={rowRef}
-            className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth snap-x snap-mandatory"
+            className="flex gap-2 overflow-x-auto scrollbar-hide  scroll-smooth snap-x snap-mandatory"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
             {displayItems.map((item, index) => {
               const isHovered = hoveredIndex === index;
               const duration = formatDuration(item);
+              const details = itemDetails.get(item.id);
+              const overview = details?.overview || item.overview;
               
               return (
                 <div
                   key={`${item.id}-${index}`}
                   className="relative flex-none w-[calc(100%/2)] sm:w-[calc(100%/3)] md:w-[calc(100%/4)] lg:w-[calc(100%/5)] xl:w-[calc(100%/6)] aspect-2/3 cursor-pointer transition-all duration-300 ease-out snap-start"
                   style={{
-                    transform: isHovered ? 'scale(1.3) translateY(-10px)' : 'scale(1)',
+                    transform: isHovered ? 'w-[100px]' : 'w-auto',
                     zIndex: isHovered ? 50 : 10,
                   }}
                   onMouseEnter={() => setHoveredIndex(index)}
@@ -242,14 +245,10 @@ export default function PosterRow({
                     
                     {isHovered && (
                       <div className="absolute inset-0 bg-black/90 flex flex-col justify-between p-3 animate-in fade-in duration-200">
-                        <div className="relative h-24 w-full rounded overflow-hidden">
-                          <img
-                            src={`https://image.tmdb.org/t/p/w300${item.backdrop_path || item.poster_path}`}
-                            alt={item.title}
-                            className="w-full h-full object-cover"
-                          />
-                          <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent" />
-                        </div>
+                       
+                          <h3 className="text-white font-bold text-[25px] text-lg text-left line-clamp-2">{item.title}</h3>
+                          
+                         
 
                         <div className="space-y-2">
                           <div className="flex items-center gap-2 text-xs">
@@ -290,6 +289,12 @@ export default function PosterRow({
                               </span>
                             ))}
                           </div>
+
+                           {overview && (
+                            <p className="text-[12px] text-gray-300 line-clamp-2 leading-relaxed">
+                              {overview}
+                            </p>
+                          )}
                         </div>
                       </div>
                     )}
@@ -302,7 +307,7 @@ export default function PosterRow({
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-100 bg-black/95 overflow-y-auto">
+        <div className="fixed z-50 h-full  bg-black/95 overflow-y-auto">
           <div className="sticky top-0 z-10 bg-black/80 backdrop-blur-md border-b border-white/10 px-6 py-4 flex items-center justify-between">
             <h2 className="text-2xl font-bold text-white">{title}</h2>
             <button 
