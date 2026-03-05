@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import HeroCarousel from "@/app/components/hero/HeroCarousel";
-import PosterRow from "@/app/components/rows/PosterRow"; // ← IMPORTADO: Componente de filas de pósters
+import PosterRow from "@/app/components/rows/PosterRow";
 import MediaLoader from "@/app/components/ui/loaders/MediaLoader";
 
 export const metadata: Metadata = {
@@ -9,8 +9,23 @@ export const metadata: Metadata = {
 };
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
-// NOTA: Corregido espacio en blanco al final de la URL base
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+
+interface Video {
+  id: string;
+  key: string;
+  name: string;
+  site: string;
+  type: string;
+  official: boolean;
+  iso_639_1?: string;
+  iso_3166_1?: string;
+}
+
+interface Genre {
+  id: number;
+  name: string;
+}
 
 interface HeroItem {
   id: number;
@@ -23,13 +38,12 @@ interface HeroItem {
   vote_average: number;
   ageRating?: string;
   logo_path?: string;
-  genres?: { id: number; name: string }[];
-  videos?: { results: any[] };
+  genres?: Genre[];
+  videos?: { results: Video[] };
   mediaType: 'movie' | 'tv';
   tmdbUrl: string;
 }
 
-// NOTA: Interfaz requerida por el componente PosterRow
 interface PosterItem {
   id: number;
   title: string;
@@ -40,51 +54,77 @@ interface PosterItem {
   duration: string;
   ageRating?: string;
   overview: string;
-  genres?: { id: number; name: string }[];
+  genres?: Genre[];
   mediaType: 'movie' | 'tv';
 }
 
-// NOTA: Función mejorada para obtener datos de múltiples endpoints en paralelo
-// Se añaden endpoints para contenido popular además de nuevos lanzamientos
-async function getNewPopularData() {
-  if (!TMDB_API_KEY) return { 
-    heroData: { results: [] }, 
-    newMoviesData: { results: [] }, 
-    newTVData: { results: [] }, 
-    upcomingData: { results: [] },
-    popularMoviesData: { results: [] }, // ← NUEVO: Para fila adicional de populares
-    popularTVData: { results: [] }      // ← NUEVO: Para fila adicional de series populares
-  };
-
-  // NOTA: Promise.all para paralelizar todas las llamadas a la API
-  const [heroRes, newMoviesRes, newTVRes, upcomingRes, popularMoviesRes, popularTVRes] = await Promise.all([
-    // Hero: Tendencias del día (mixto películas + series)
-    fetch(`${TMDB_BASE_URL}/trending/all/day?api_key=${TMDB_API_KEY}&language=es-ES`, { next: { revalidate: 1800 } }),
-    // Fila 1: Estrenos en cines (ES)
-    fetch(`${TMDB_BASE_URL}/movie/now_playing?api_key=${TMDB_API_KEY}&language=es-ES&region=ES`, { next: { revalidate: 3600 } }),
-    // Fila 2: Series en emisión
-    fetch(`${TMDB_BASE_URL}/tv/on_the_air?api_key=${TMDB_API_KEY}&language=es-ES`, { next: { revalidate: 3600 } }),
-    // Fila 3: Próximos estrenos
-    fetch(`${TMDB_BASE_URL}/movie/upcoming?api_key=${TMDB_API_KEY}&language=es-ES&region=ES`, { next: { revalidate: 3600 } }),
-    // Fila 4: Películas populares (globales)
-    fetch(`${TMDB_BASE_URL}/movie/popular?api_key=${TMDB_API_KEY}&language=es-ES&page=1`, { next: { revalidate: 3600 } }),
-    // Fila 5: Series populares
-    fetch(`${TMDB_BASE_URL}/tv/popular?api_key=${TMDB_API_KEY}&language=es-ES&page=1`, { next: { revalidate: 3600 } }),
-  ]);
-
-  const [heroData, newMoviesData, newTVData, upcomingData, popularMoviesData, popularTVData] = await Promise.all([
-    heroRes.json(),
-    newMoviesRes.json(),
-    newTVRes.json(),
-    upcomingRes.json(),
-    popularMoviesRes.json(),
-    popularTVRes.json(),
-  ]);
-
-  return { heroData, newMoviesData, newTVData, upcomingData, popularMoviesData, popularTVData };
+async function safeFetch(url: string, revalidate: number = 3600): Promise<any> {
+  try {
+    const res = await fetch(url, { next: { revalidate } });
+    
+    if (!res.ok) {
+      console.error(`Fetch error ${res.status}: ${url}`);
+      return { results: [] };
+    }
+    
+    const text = await res.text();
+    
+    if (!text || text.trim() === '') {
+      console.error(`Empty response from: ${url}`);
+      return { results: [] };
+    }
+    
+    try {
+      return JSON.parse(text);
+    } catch (parseError) {
+      console.error(`JSON parse error for ${url}:`, text.substring(0, 100));
+      return { results: [] };
+    }
+  } catch (error) {
+    console.error(`Network error for ${url}:`, error);
+    return { results: [] };
+  }
 }
 
-// NOTA: Función helper para formatear duración según tipo de medio
+// NOTA: Función para obtener clasificación por edad
+async function getAgeRating(id: number, mediaType: 'movie' | 'tv'): Promise<string> {
+  try {
+    const url = mediaType === 'movie'
+      ? `${TMDB_BASE_URL}/movie/${id}/release_dates?api_key=${TMDB_API_KEY}`
+      : `${TMDB_BASE_URL}/tv/${id}/content_ratings?api_key=${TMDB_API_KEY}`;
+    
+    const res = await fetch(url, { next: { revalidate: 86400 } });
+    if (!res.ok) return '';
+    
+    const data = await res.json();
+    
+    if (mediaType === 'movie') {
+      const cert = data.results?.find((r: any) => r.iso_3166_1 === 'ES')?.release_dates?.find((d: any) => d.certification)?.certification ||
+                  data.results?.find((r: any) => r.iso_3166_1 === 'US')?.release_dates?.find((d: any) => d.certification)?.certification || '';
+      return convertToAgeFormat(cert);
+    } else {
+      const rating = data.results?.find((r: any) => r.iso_3166_1 === 'ES')?.rating ||
+                    data.results?.find((r: any) => r.iso_3166_1 === 'US')?.rating || '';
+      return convertToAgeFormat(rating);
+    }
+  } catch (e) {
+    return '';
+  }
+}
+
+function convertToAgeFormat(cert: string): string {
+  if (!cert) return '';
+  const ageMap: { [key: string]: string } = {
+    'APTA': '0+', 'G': '0+', 'TV-Y': '0+', 'TV-G': '0+',
+    '7': '7+', 'PG': '7+', 'TV-Y7': '7+', 'TV-PG': '7+',
+    '12': '12+', 'PG-13': '12+',
+    '14': '14+', 'TV-14': '14+',
+    '16': '16+', 'R': '16+',
+    '18': '18+', 'NC-17': '18+', 'TV-MA': '18+',
+  };
+  return ageMap[cert] || cert;
+}
+
 function formatRuntime(item: any, isMovie: boolean): string {
   if (isMovie) {
     const runtime = item.runtime || 0;
@@ -98,32 +138,158 @@ function formatRuntime(item: any, isMovie: boolean): string {
   }
 }
 
-// NOTA: Convierte respuesta de API al formato que espera HeroCarousel
-function toHeroItem(item: any): HeroItem {
-  const isMovie = item.media_type === 'movie';
-  
+async function getNewPopularData() {
+  if (!TMDB_API_KEY) {
+    console.error('TMDB_API_KEY no está configurada');
+    return {
+      heroData: { results: [] },
+      trendingMoviesData: { results: [] },
+      trendingTVData: { results: [] },
+      popularMoviesData: { results: [] },
+      popularTVData: { results: [] },
+      topRatedMoviesData: { results: [] },
+      topRatedTVData: { results: [] },
+      nowPlayingMoviesData: { results: [] },
+      airingTodayTVData: { results: [] },
+      onTheAirTVData: { results: [] },
+      upcomingMoviesData: { results: [] },
+      actionMoviesData: { results: [] },
+      actionAdventureTVData: { results: [] },
+      comedyMoviesData: { results: [] },
+      comedyTVData: { results: [] },
+      horrorMoviesData: { results: [] },
+      scifiMoviesData: { results: [] },
+      scifiTVData: { results: [] },
+      animationMoviesData: { results: [] },
+      animationTVData: { results: [] },
+      dramaTVData: { results: [] },
+      thrillerMoviesData: { results: [] },
+    };
+  }
+
+  const results = await Promise.all([
+    safeFetch(`${TMDB_BASE_URL}/trending/all/day?api_key=${TMDB_API_KEY}&language=es-ES`, 1800),
+    safeFetch(`${TMDB_BASE_URL}/trending/movie/week?api_key=${TMDB_API_KEY}&language=es-ES`),
+    safeFetch(`${TMDB_BASE_URL}/trending/tv/week?api_key=${TMDB_API_KEY}&language=es-ES`),
+    safeFetch(`${TMDB_BASE_URL}/movie/popular?api_key=${TMDB_API_KEY}&language=es-ES&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/tv/popular?api_key=${TMDB_API_KEY}&language=es-ES&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/movie/top_rated?api_key=${TMDB_API_KEY}&language=es-ES&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/tv/top_rated?api_key=${TMDB_API_KEY}&language=es-ES&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/movie/now_playing?api_key=${TMDB_API_KEY}&language=es-ES&region=ES`),
+    safeFetch(`${TMDB_BASE_URL}/tv/airing_today?api_key=${TMDB_API_KEY}&language=es-ES`),
+    safeFetch(`${TMDB_BASE_URL}/tv/on_the_air?api_key=${TMDB_API_KEY}&language=es-ES`),
+    safeFetch(`${TMDB_BASE_URL}/movie/upcoming?api_key=${TMDB_API_KEY}&language=es-ES&region=ES`),
+    safeFetch(`${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=28&sort_by=popularity.desc&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=10759&sort_by=popularity.desc&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=35&sort_by=popularity.desc&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=35&sort_by=popularity.desc&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=27&sort_by=popularity.desc&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=878&sort_by=popularity.desc&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=10765&sort_by=popularity.desc&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=16&sort_by=popularity.desc&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=16&sort_by=popularity.desc&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=18&sort_by=popularity.desc&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=53&sort_by=popularity.desc&page=1`),
+  ]);
+
   return {
-    id: item.id,
-    displayTitle: isMovie ? item.title : item.name,
-    displayYear: isMovie 
-      ? (item.release_date ? new Date(item.release_date).getFullYear().toString() : '')
-      : (item.first_air_date ? new Date(item.first_air_date).getFullYear().toString() : ''),
-    displayRuntime: formatRuntime(item, isMovie),
-    overview: item.overview,
-    backdrop_path: item.backdrop_path,
-    poster_path: item.poster_path,
-    vote_average: item.vote_average,
-    ageRating: '13+',
-    logo_path: item.logo_path,
-    genres: item.genres,
-    videos: item.videos,
-    mediaType: isMovie ? 'movie' : 'tv',
-    tmdbUrl: `https://www.themoviedb.org/${item.media_type}/${item.id}`, // NOTA: Corregido espacio en URL
+    heroData: results[0],
+    trendingMoviesData: results[1],
+    trendingTVData: results[2],
+    popularMoviesData: results[3],
+    popularTVData: results[4],
+    topRatedMoviesData: results[5],
+    topRatedTVData: results[6],
+    nowPlayingMoviesData: results[7],
+    airingTodayTVData: results[8],
+    onTheAirTVData: results[9],
+    upcomingMoviesData: results[10],
+    actionMoviesData: results[11],
+    actionAdventureTVData: results[12],
+    comedyMoviesData: results[13],
+    comedyTVData: results[14],
+    horrorMoviesData: results[15],
+    scifiMoviesData: results[16],
+    scifiTVData: results[17],
+    animationMoviesData: results[18],
+    animationTVData: results[19],
+    dramaTVData: results[20],
+    thrillerMoviesData: results[21],
   };
 }
 
-// NOTA: Convierte respuesta de API al formato que espera PosterRow
-function toPosterItem(item: any, isMovie: boolean): PosterItem {
+// NOTA: Función CRÍTICA - Enriquece los items del Hero con logos, videos y detalles completos
+async function enrichHeroItem(item: any): Promise<HeroItem> {
+  const mediaType = item.media_type || 'movie';
+  const isMovie = mediaType === 'movie';
+  
+  try {
+    // NOTA: Llamadas paralelas para obtener datos enriquecidos
+    const [videosRes, detailsRes, imagesRes] = await Promise.all([
+      fetch(`${TMDB_BASE_URL}/${mediaType}/${item.id}/videos?api_key=${TMDB_API_KEY}&language=es-ES&include_video_language=en,es`, 
+        { next: { revalidate: 86400 } }),
+      fetch(`${TMDB_BASE_URL}/${mediaType}/${item.id}?api_key=${TMDB_API_KEY}&language=es-ES`, 
+        { next: { revalidate: 3600 } }),
+      fetch(`${TMDB_BASE_URL}/${mediaType}/${item.id}/images?api_key=${TMDB_API_KEY}`, 
+        { next: { revalidate: 86400 } }),
+    ]);
+
+    const videosData = videosRes.ok ? await videosRes.json() : { results: [] };
+    const detailsData = detailsRes.ok ? await detailsRes.json() : {};
+    const imagesData = imagesRes.ok ? await imagesRes.json() : { logos: [] };
+
+    // NOTA: Selección inteligente de logo - prioriza español, luego inglés, luego cualquiera
+    const logos = imagesData.logos || [];
+    const esLogo = logos.find((l: any) => l.iso_639_1 === 'es');
+    const enLogo = logos.find((l: any) => l.iso_639_1 === 'en');
+    const logoPath = esLogo?.file_path || enLogo?.file_path || logos[0]?.file_path || '';
+
+    // NOTA: Obtener clasificación por edad
+    const ageRating = await getAgeRating(item.id, mediaType);
+
+    return {
+      id: item.id,
+      displayTitle: isMovie ? (item.title || 'Sin título') : (item.name || 'Sin título'),
+      displayYear: isMovie 
+        ? (item.release_date ? new Date(item.release_date).getFullYear().toString() : '')
+        : (item.first_air_date ? new Date(item.first_air_date).getFullYear().toString() : ''),
+      displayRuntime: formatRuntime(detailsData, isMovie),
+      overview: item.overview || '',
+      backdrop_path: item.backdrop_path || '',
+      poster_path: item.poster_path || '',
+      vote_average: item.vote_average || 0,
+      ageRating,
+      logo_path: logoPath, // NOTA: Este es el logo que debe mostrar el HeroCarousel
+      genres: detailsData.genres?.slice(0, 5) || [],
+      videos: videosData,
+      mediaType: mediaType as 'movie' | 'tv',
+      tmdbUrl: `https://www.themoviedb.org/${mediaType}/${item.id}`,
+    };
+  } catch (error) {
+    console.error(`Error enriqueciendo item ${item.id}:`, error);
+    return {
+      id: item.id,
+      displayTitle: isMovie ? (item.title || 'Sin título') : (item.name || 'Sin título'),
+      displayYear: isMovie 
+        ? (item.release_date ? new Date(item.release_date).getFullYear().toString() : '')
+        : (item.first_air_date ? new Date(item.first_air_date).getFullYear().toString() : ''),
+      displayRuntime: '',
+      overview: item.overview || '',
+      backdrop_path: item.backdrop_path || '',
+      poster_path: item.poster_path || '',
+      vote_average: item.vote_average || 0,
+      ageRating: '',
+      logo_path: '',
+      genres: [],
+      videos: { results: [] },
+      mediaType: mediaType as 'movie' | 'tv',
+      tmdbUrl: `https://www.themoviedb.org/${mediaType}/${item.id}`,
+    };
+  }
+}
+
+function toPosterItem(item: any, mediaType: 'movie' | 'tv'): PosterItem {
+  const isMovie = mediaType === 'movie';
   const runtime = formatRuntime(item, isMovie);
   
   return {
@@ -139,41 +305,106 @@ function toPosterItem(item: any, isMovie: boolean): PosterItem {
     ageRating: '13+',
     overview: item.overview,
     genres: item.genres,
-    mediaType: isMovie ? 'movie' : 'tv',
+    mediaType: mediaType,
   };
 }
 
 async function NewPopularContent() {
-  // NOTA: Desestructuración de todos los datos obtenidos
-  const { heroData, newMoviesData, newTVData, upcomingData, popularMoviesData, popularTVData } = await getNewPopularData();
+  const {
+    heroData,
+    trendingMoviesData,
+    trendingTVData,
+    popularMoviesData,
+    popularTVData,
+    topRatedMoviesData,
+    topRatedTVData,
+    nowPlayingMoviesData,
+    airingTodayTVData,
+    onTheAirTVData,
+    upcomingMoviesData,
+    actionMoviesData,
+    actionAdventureTVData,
+    comedyMoviesData,
+    comedyTVData,
+    horrorMoviesData,
+    scifiMoviesData,
+    scifiTVData,
+    animationMoviesData,
+    animationTVData,
+    dramaTVData,
+    thrillerMoviesData,
+  } = await getNewPopularData();
 
-  // NOTA: Mapeo de datos a los formatos correctos para cada componente
-  const heroItems = heroData?.results?.slice(0, 5).map(toHeroItem) || [];
-  const newMovies = newMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, true)) || [];
-  const newTV = newTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, false)) || [];
-  const comingSoon = upcomingData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, true)) || [];
-  const popularMovies = popularMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, true)) || [];
-  const popularTV = popularTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, false)) || [];
+  // NOTA: Enriquecimiento PARALELO de los items del Hero para obtener logos y detalles
+  const heroItems = await Promise.all(
+    (heroData?.results?.slice(0, 5) || []).map(enrichHeroItem)
+  );
+  
+  const trendingMovies = trendingMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+  const trendingTV = trendingTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'tv')) || [];
+  const popularMovies = popularMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+  const popularTV = popularTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'tv')) || [];
+  const topRatedMovies = topRatedMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+  const topRatedTV = topRatedTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'tv')) || [];
+  const nowPlayingMovies = nowPlayingMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+  const airingTodayTV = airingTodayTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'tv')) || [];
+  const onTheAirTV = onTheAirTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'tv')) || [];
+  const upcomingMovies = upcomingMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+  const actionMovies = actionMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+  const actionAdventureTV = actionAdventureTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'tv')) || [];
+  const comedyMovies = comedyMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+  const comedyTV = comedyTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'tv')) || [];
+  const horrorMovies = horrorMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+  const scifiMovies = scifiMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+  const scifiTV = scifiTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'tv')) || [];
+  const animationMovies = animationMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+  const animationTV = animationTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'tv')) || [];
+  const dramaTV = dramaTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'tv')) || [];
+  const thrillerMovies = thrillerMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+
+  if (!heroItems || heroItems.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-black text-white">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">No se pudo cargar el contenido</h1>
+          <p className="text-gray-400">Verifica tu conexión y la API key de TMDB</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black">
-      {/* NOTA: HeroCarousel muestra tendencias mixtas (películas + series) */}
-      <HeroCarousel items={heroItems} />
+      {/* NOTA: HeroCarousel ahora recibe items enriquecidos con logo_path */}
+      <HeroCarousel 
+        items={heroItems} 
+        mediaType="movie"
+        autoPlayInterval={8000}
+        trailerDelay={5000}
+      />
       
-      {/* 
-        NOTA: Contenedor de filas PosterRow con:
-        - relative z-20: Para posicionar sobre el hero con z-index alto
-        - -mt-20: Margen negativo para solapamiento estilo Netflix
-        - space-y-8: Espaciado vertical entre filas
-        - pb-12: Padding inferior para respiración al final de página
-      */}
       <div className="relative z-20 -mt-20 space-y-8 pb-12">
-        {/* NOTA: Orden de filas: Populares primero, luego nuevos, luego próximos */}
-        <PosterRow title="Películas Populares" items={popularMovies} mediaType="movie" />
-        <PosterRow title="Series Populares" items={popularTV} mediaType="tv" />
-        <PosterRow title="Nuevos Lanzamientos" items={newMovies} mediaType="movie" />
-        <PosterRow title="Nuevas Series" items={newTV} mediaType="tv" />
-        <PosterRow title="Próximamente en Cines" items={comingSoon} mediaType="movie" />
+        <PosterRow title="🔥 Películas en Tendencia Esta Semana" items={trendingMovies} mediaType="movie" />
+        <PosterRow title="🔥 Series en Tendencia Esta Semana" items={trendingTV} mediaType="tv" />
+        <PosterRow title="⭐ Películas Más Populares" items={popularMovies} mediaType="movie" />
+        <PosterRow title="⭐ Series Más Populares" items={popularTV} mediaType="tv" />
+        <PosterRow title="🎬 Estrenos en Cines" items={nowPlayingMovies} mediaType="movie" />
+        <PosterRow title="📺 Nuevos Episodios Hoy" items={airingTodayTV} mediaType="tv" />
+        <PosterRow title="📡 Series en Emisión" items={onTheAirTV} mediaType="tv" />
+        <PosterRow title="🚀 Próximos Estrenos" items={upcomingMovies} mediaType="movie" />
+        <PosterRow title="🏆 Películas Mejor Valoradas" items={topRatedMovies} mediaType="movie" />
+        <PosterRow title="🏆 Series Mejor Valoradas" items={topRatedTV} mediaType="tv" />
+        <PosterRow title="💥 Acción" items={actionMovies} mediaType="movie" />
+        <PosterRow title="⚔️ Acción y Aventura" items={actionAdventureTV} mediaType="tv" />
+        <PosterRow title="😂 Comedia" items={comedyMovies} mediaType="movie" />
+        <PosterRow title="🎭 Series de Comedia" items={comedyTV} mediaType="tv" />
+        <PosterRow title="👻 Terror" items={horrorMovies} mediaType="movie" />
+        <PosterRow title="🤖 Ciencia Ficción" items={scifiMovies} mediaType="movie" />
+        <PosterRow title="🛸 Series de Ciencia Ficción" items={scifiTV} mediaType="tv" />
+        <PosterRow title="🎨 Películas de Animación" items={animationMovies} mediaType="movie" />
+        <PosterRow title="✨ Series de Animación" items={animationTV} mediaType="tv" />
+        <PosterRow title="🎭 Drama" items={dramaTV} mediaType="tv" />
+        <PosterRow title="😰 Suspense" items={thrillerMovies} mediaType="movie" />
       </div>
     </div>
   );
