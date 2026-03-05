@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import HeroCarousel from "@/app/components/hero/HeroCarousel";
-import PosterRow from "@/app/components/rows/PosterRow"; // ← IMPORTADO: Añadido para filas de contenido mixto
+import PosterRow from "@/app/components/rows/PosterRow";
 import MediaLoader from "@/app/components/ui/loaders/MediaLoader";
 
 export const metadata: Metadata = {
@@ -9,7 +9,6 @@ export const metadata: Metadata = {
 };
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
-// NOTA: Corregido espacio en blanco al final de la URL base
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
 interface Video {
@@ -28,7 +27,6 @@ interface Genre {
   name: string;
 }
 
-// Interfaz que espera el HeroCarousel
 interface CarouselItem {
   id: number;
   displayTitle: string;
@@ -42,11 +40,10 @@ interface CarouselItem {
   logo_path?: string;
   genres?: Genre[];
   videos?: { results: Video[] };
-  mediaType: 'movie' | 'tv'; // NOTA: Mixto en home
+  mediaType: 'movie' | 'tv';
   tmdbUrl: string;
 }
 
-// NOTA: Interfaz requerida por PosterRow - soporta ambos tipos
 interface PosterItem {
   id: number;
   title: string;
@@ -58,12 +55,42 @@ interface PosterItem {
   ageRating?: string;
   overview: string;
   genres?: Genre[];
-  mediaType: 'movie' | 'tv'; // NOTA: Mixto en home
+  mediaType: 'movie' | 'tv';
 }
 
-// NOTA: Función unificada para obtener contenido mixto del home
+// NOTA: Helper para hacer fetch seguro con manejo de errores
+async function safeFetch(url: string, revalidate: number = 3600): Promise<any> {
+  try {
+    const res = await fetch(url, { next: { revalidate } });
+    
+    if (!res.ok) {
+      console.error(`Fetch error ${res.status}: ${url}`);
+      return { results: [] };
+    }
+    
+    const text = await res.text();
+    
+    // Verificar si la respuesta está vacía
+    if (!text || text.trim() === '') {
+      console.error(`Empty response from: ${url}`);
+      return { results: [] };
+    }
+    
+    try {
+      return JSON.parse(text);
+    } catch (parseError) {
+      console.error(`JSON parse error for ${url}:`, text.substring(0, 100));
+      return { results: [] };
+    }
+  } catch (error) {
+    console.error(`Network error for ${url}:`, error);
+    return { results: [] };
+  }
+}
+
 async function getHomeData() {
   if (!TMDB_API_KEY) {
+    console.error('TMDB_API_KEY no está configurada');
     return {
       trendingData: { results: [] },
       popularMoviesData: { results: [] },
@@ -71,45 +98,62 @@ async function getHomeData() {
       topRatedMoviesData: { results: [] },
       topRatedTVData: { results: [] },
       upcomingMoviesData: { results: [] },
+      nowPlayingMoviesData: { results: [] },
+      airingTodayTVData: { results: [] },
+      onTheAirTVData: { results: [] },
+      actionMoviesData: { results: [] },
+      comedyMoviesData: { results: [] },
+      horrorMoviesData: { results: [] },
+      animationMoviesData: { results: [] },
+      documentaryMoviesData: { results: [] },
+      dramaTVData: { results: [] },
+      actionAdventureTVData: { results: [] },
+      animationTVData: { results: [] },
     };
   }
 
-  // NOTA: 6 endpoints en paralelo para contenido mixto de home
-  const [trendingRes, popularMoviesRes, popularTVRes, topRatedMoviesRes, topRatedTVRes, upcomingRes] = await Promise.all([
-    // Hero: Tendencias mixtas (películas + series)
-    fetch(`${TMDB_BASE_URL}/trending/all/week?api_key=${TMDB_API_KEY}&language=es-ES`, { next: { revalidate: 3600 } }),
-    // Fila 1: Películas populares
-    fetch(`${TMDB_BASE_URL}/movie/popular?api_key=${TMDB_API_KEY}&language=es-ES&page=1`, { next: { revalidate: 3600 } }),
-    // Fila 2: Series populares
-    fetch(`${TMDB_BASE_URL}/tv/popular?api_key=${TMDB_API_KEY}&language=es-ES&page=1`, { next: { revalidate: 3600 } }),
-    // Fila 3: Películas mejor valoradas
-    fetch(`${TMDB_BASE_URL}/movie/top_rated?api_key=${TMDB_API_KEY}&language=es-ES&page=1`, { next: { revalidate: 3600 } }),
-    // Fila 4: Series mejor valoradas
-    fetch(`${TMDB_BASE_URL}/tv/top_rated?api_key=${TMDB_API_KEY}&language=es-ES&page=1`, { next: { revalidate: 3600 } }),
-    // Fila 5: Próximos estrenos (películas)
-    fetch(`${TMDB_BASE_URL}/movie/upcoming?api_key=${TMDB_API_KEY}&language=es-ES&region=ES&page=1`, { next: { revalidate: 3600 } }),
-  ]);
-
-  const [trendingData, popularMoviesData, popularTVData, topRatedMoviesData, topRatedTVData, upcomingMoviesData] = await Promise.all([
-    trendingRes.json(),
-    popularMoviesRes.json(),
-    popularTVRes.json(),
-    topRatedMoviesRes.json(),
-    topRatedTVRes.json(),
-    upcomingRes.json(),
+  // NOTA: Usar safeFetch para manejar errores de forma individual
+  const results = await Promise.all([
+    safeFetch(`${TMDB_BASE_URL}/trending/all/week?api_key=${TMDB_API_KEY}&language=es-ES`),
+    safeFetch(`${TMDB_BASE_URL}/movie/popular?api_key=${TMDB_API_KEY}&language=es-ES&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/tv/popular?api_key=${TMDB_API_KEY}&language=es-ES&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/movie/top_rated?api_key=${TMDB_API_KEY}&language=es-ES&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/tv/top_rated?api_key=${TMDB_API_KEY}&language=es-ES&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/movie/upcoming?api_key=${TMDB_API_KEY}&language=es-ES&region=ES&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/movie/now_playing?api_key=${TMDB_API_KEY}&language=es-ES&region=ES&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/tv/airing_today?api_key=${TMDB_API_KEY}&language=es-ES&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/tv/on_the_air?api_key=${TMDB_API_KEY}&language=es-ES&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=28&sort_by=popularity.desc&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=35&sort_by=popularity.desc&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=27&sort_by=popularity.desc&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=16&sort_by=popularity.desc&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=99&sort_by=popularity.desc&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=18&sort_by=popularity.desc&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=10759&sort_by=popularity.desc&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=16&sort_by=popularity.desc&page=1`),
   ]);
 
   return {
-    trendingData,
-    popularMoviesData,
-    popularTVData,
-    topRatedMoviesData,
-    topRatedTVData,
-    upcomingMoviesData,
+    trendingData: results[0],
+    popularMoviesData: results[1],
+    popularTVData: results[2],
+    topRatedMoviesData: results[3],
+    topRatedTVData: results[4],
+    upcomingMoviesData: results[5],
+    nowPlayingMoviesData: results[6],
+    airingTodayTVData: results[7],
+    onTheAirTVData: results[8],
+    actionMoviesData: results[9],
+    comedyMoviesData: results[10],
+    horrorMoviesData: results[11],
+    animationMoviesData: results[12],
+    documentaryMoviesData: results[13],
+    dramaTVData: results[14],
+    actionAdventureTVData: results[15],
+    animationTVData: results[16],
   };
 }
 
-// NOTA: Formatea duración según tipo: "1h 30m" para pelis, "2 Temporadas" para series
 function formatRuntime(item: any, mediaType: 'movie' | 'tv'): string {
   if (mediaType === 'movie') {
     const runtime = item.runtime || 0;
@@ -136,13 +180,11 @@ function convertToAgeFormat(cert: string): string {
   return ageMap[cert] || cert;
 }
 
-// NOTA: Convierte item de API a formato HeroCarousel con enriquecimiento completo
 async function enrichHeroItem(item: any): Promise<CarouselItem> {
   const mediaType = item.media_type || 'movie';
   const isMovie = mediaType === 'movie';
   
   try {
-    // NOTA: Llamadas específicas según tipo de medio
     const [videosRes, detailsRes, imagesRes] = await Promise.all([
       fetch(`${TMDB_BASE_URL}/${mediaType}/${item.id}/videos?api_key=${TMDB_API_KEY}&language=es-ES&include_video_language=en,es`, 
         { next: { revalidate: 86400 } }),
@@ -156,13 +198,11 @@ async function enrichHeroItem(item: any): Promise<CarouselItem> {
     const detailsData = detailsRes.ok ? await detailsRes.json() : {};
     const imagesData = imagesRes.ok ? await imagesRes.json() : { logos: [] };
 
-    // NOTA: Selección inteligente de logo
     const logos = imagesData.logos || [];
     const esLogo = logos.find((l: any) => l.iso_639_1 === 'es');
     const enLogo = logos.find((l: any) => l.iso_639_1 === 'en');
     const logoPath = esLogo?.file_path || enLogo?.file_path || logos[0]?.file_path || '';
 
-    // NOTA: Obtención de clasificación por edad con endpoints diferentes para movie/tv
     let ageRating = '';
     try {
       const ratingUrl = isMovie 
@@ -200,7 +240,7 @@ async function enrichHeroItem(item: any): Promise<CarouselItem> {
       genres: detailsData.genres?.slice(0, 5) || [],
       videos: videosData,
       mediaType: mediaType as 'movie' | 'tv',
-      tmdbUrl: `https://www.themoviedb.org/${mediaType}/${item.id}`, // NOTA: Corregido espacio
+      tmdbUrl: `https://www.themoviedb.org/${mediaType}/${item.id}`,
     };
   } catch (error) {
     console.error(`Error enriqueciendo item ${item.id}:`, error);
@@ -225,7 +265,6 @@ async function enrichHeroItem(item: any): Promise<CarouselItem> {
   }
 }
 
-// NOTA: Convierte item de API a formato PosterRow (versión ligera)
 function toPosterItem(item: any, mediaType: 'movie' | 'tv'): PosterItem {
   const isMovie = mediaType === 'movie';
   
@@ -238,7 +277,7 @@ function toPosterItem(item: any, mediaType: 'movie' | 'tv'): PosterItem {
     releaseYear: isMovie 
       ? (item.release_date ? new Date(item.release_date).getFullYear().toString() : '')
       : (item.first_air_date ? new Date(item.first_air_date).getFullYear().toString() : ''),
-    duration: '', // NOTA: PosterRow calculará esto dinámicamente
+    duration: '',
     ageRating: '13+',
     overview: item.overview || '',
     genres: item.genre_ids?.map((id: number) => ({ id, name: '' })) || [],
@@ -254,19 +293,40 @@ async function HomeContent() {
     topRatedMoviesData,
     topRatedTVData,
     upcomingMoviesData,
+    nowPlayingMoviesData,
+    airingTodayTVData,
+    onTheAirTVData,
+    actionMoviesData,
+    comedyMoviesData,
+    horrorMoviesData,
+    animationMoviesData,
+    documentaryMoviesData,
+    dramaTVData,
+    actionAdventureTVData,
+    animationTVData,
   } = await getHomeData();
 
-  // NOTA: Enriquecimiento paralelo de los 5 primeros items tendencias para el Hero
   const heroItems = await Promise.all(
     (trendingData?.results?.slice(0, 5) || []).map(enrichHeroItem)
   );
 
-  // NOTA: Mapeo directo a PosterItem para las filas (sin enriquecimiento adicional)
   const popularMovies = popularMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
   const popularTV = popularTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'tv')) || [];
   const topRatedMovies = topRatedMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
   const topRatedTV = topRatedTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'tv')) || [];
   const upcomingMovies = upcomingMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+  
+  const nowPlayingMovies = nowPlayingMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+  const airingTodayTV = airingTodayTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'tv')) || [];
+  const onTheAirTV = onTheAirTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'tv')) || [];
+  const actionMovies = actionMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+  const comedyMovies = comedyMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+  const horrorMovies = horrorMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+  const animationMovies = animationMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+  const documentaries = documentaryMoviesData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'movie')) || [];
+  const dramaTV = dramaTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'tv')) || [];
+  const actionAdventureTV = actionAdventureTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'tv')) || [];
+  const animationTV = animationTVData?.results?.slice(0, 15).map((i: any) => toPosterItem(i, 'tv')) || [];
 
   if (!heroItems || heroItems.length === 0) {
     return (
@@ -281,10 +341,6 @@ async function HomeContent() {
 
   return (
     <div className="min-h-screen bg-black">
-      {/* 
-        NOTA: HeroCarousel muestra contenido mixto (películas y series juntas)
-        El mediaType="movie" es solo un default, cada item tiene su mediaType real
-      */}
       <HeroCarousel
         items={heroItems}
         mediaType="movie"
@@ -292,18 +348,25 @@ async function HomeContent() {
         trailerDelay={5000}
       />
       
-      {/* 
-        NOTA: Contenedor de filas PosterRow con contenido mixto organizado:
-        - Primero populares (pelis y series)
-        - Luego mejor valoradas (pelis y series)  
-        - Al final próximos estrenos (solo pelis)
-      */}
       <div className="relative z-20 -mt-20 space-y-8 pb-12">
         <PosterRow title="Películas Populares" items={popularMovies} mediaType="movie" />
         <PosterRow title="Series Populares" items={popularTV} mediaType="tv" />
         <PosterRow title="Películas Mejor Valoradas" items={topRatedMovies} mediaType="movie" />
         <PosterRow title="Series Mejor Valoradas" items={topRatedTV} mediaType="tv" />
         <PosterRow title="Próximos Estrenos" items={upcomingMovies} mediaType="movie" />
+        
+        <PosterRow title="En Cartelera Ahora" items={nowPlayingMovies} mediaType="movie" />
+        <PosterRow title="Acción" items={actionMovies} mediaType="movie" />
+        <PosterRow title="Comedia" items={comedyMovies} mediaType="movie" />
+        <PosterRow title="Terror" items={horrorMovies} mediaType="movie" />
+        <PosterRow title="Animación" items={animationMovies} mediaType="movie" />
+        <PosterRow title="Documentales" items={documentaries} mediaType="movie" />
+        
+        <PosterRow title="Series al Aire Hoy" items={airingTodayTV} mediaType="tv" />
+        <PosterRow title="Series en Emisión" items={onTheAirTV} mediaType="tv" />
+        <PosterRow title="Series de Drama" items={dramaTV} mediaType="tv" />
+        <PosterRow title="Acción y Aventura" items={actionAdventureTV} mediaType="tv" />
+        <PosterRow title="Series de Animación" items={animationTV} mediaType="tv" />
       </div>
     </div>
   );
