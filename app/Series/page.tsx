@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import HeroCarousel from "@/app/components/hero/HeroCarousel";
-import PosterRow from "@/app/components/rows/PosterRow"; // ← IMPORTADO: Añadido para filas de series
+import PosterRow from "@/app/components/rows/PosterRow";
 import MediaLoader from "@/app/components/ui/loaders/MediaLoader";
 
 export const metadata: Metadata = {
@@ -9,7 +9,6 @@ export const metadata: Metadata = {
 };
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
-// NOTA: Corregido espacio en blanco al final de la URL base
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
 interface Video {
@@ -23,19 +22,11 @@ interface Video {
   iso_3166_1?: string;
 }
 
-interface Season {
-  id: number;
-  name: string;
-  season_number: number;
-  episode_count: number;
-}
-
 interface Genre {
   id: number;
   name: string;
 }
 
-// Interfaz que espera el HeroCarousel
 interface CarouselItem {
   id: number;
   displayTitle: string;
@@ -49,11 +40,10 @@ interface CarouselItem {
   logo_path?: string;
   genres?: Genre[];
   videos?: { results: Video[] };
-  mediaType: 'tv'; // NOTA: Siempre 'tv' en esta página
+  mediaType: 'tv';
   tmdbUrl: string;
 }
 
-// NOTA: Interfaz requerida por PosterRow para mostrar series
 interface PosterItem {
   id: number;
   title: string;
@@ -61,57 +51,38 @@ interface PosterItem {
   backdrop_path?: string;
   vote_average: number;
   releaseYear: string;
-  duration: string; // NOTA: Para series muestra "X Temporadas"
+  duration: string;
   ageRating?: string;
   overview: string;
   genres?: Genre[];
-  mediaType: 'tv'; // NOTA: Siempre 'tv' en esta página
+  mediaType: 'tv';
 }
 
-// NOTA: Función unificada para obtener todas las series (hero + filas)
-async function getSeriesData() {
-  if (!TMDB_API_KEY) {
-    return { 
-      heroSeries: [], 
-      popularSeries: [], 
-      topRatedSeries: [], 
-      onTheAirSeries: [], 
-      airingTodaySeries: [] 
-    };
+// NOTA: Helper para fetch seguro
+async function safeFetch(url: string, revalidate: number = 3600): Promise<any> {
+  try {
+    const res = await fetch(url, { next: { revalidate } });
+    if (!res.ok) {
+      console.error(`Fetch error ${res.status}: ${url}`);
+      return { results: [] };
+    }
+    const text = await res.text();
+    if (!text || text.trim() === '') {
+      console.error(`Empty response from: ${url}`);
+      return { results: [] };
+    }
+    try {
+      return JSON.parse(text);
+    } catch (parseError) {
+      console.error(`JSON parse error for ${url}:`, text.substring(0, 100));
+      return { results: [] };
+    }
+  } catch (error) {
+    console.error(`Network error for ${url}:`, error);
+    return { results: [] };
   }
-
-  // NOTA: Paralelización de 5 endpoints de series
-  const [trendingRes, popularRes, topRatedRes, onTheAirRes, airingTodayRes] = await Promise.all([
-    // Hero: Series en tendencia esta semana
-    fetch(`${TMDB_BASE_URL}/trending/tv/week?api_key=${TMDB_API_KEY}&language=es-ES`, { next: { revalidate: 3600 } }),
-    // Fila 1: Series populares
-    fetch(`${TMDB_BASE_URL}/tv/popular?api_key=${TMDB_API_KEY}&language=es-ES&page=1`, { next: { revalidate: 3600 } }),
-    // Fila 2: Mejor valoradas
-    fetch(`${TMDB_BASE_URL}/tv/top_rated?api_key=${TMDB_API_KEY}&language=es-ES&page=1`, { next: { revalidate: 3600 } }),
-    // Fila 3: En emisión (con episodios recientes)
-    fetch(`${TMDB_BASE_URL}/tv/on_the_air?api_key=${TMDB_API_KEY}&language=es-ES&page=1`, { next: { revalidate: 3600 } }),
-    // Fila 4: Emitiéndose hoy
-    fetch(`${TMDB_BASE_URL}/tv/airing_today?api_key=${TMDB_API_KEY}&language=es-ES&page=1`, { next: { revalidate: 3600 } }),
-  ]);
-
-  const [trendingData, popularData, topRatedData, onTheAirData, airingTodayData] = await Promise.all([
-    trendingRes.json(),
-    popularRes.json(),
-    topRatedRes.json(),
-    onTheAirRes.json(),
-    airingTodayRes.json(),
-  ]);
-
-  return { 
-    trendingData, 
-    popularData, 
-    topRatedData, 
-    onTheAirData, 
-    airingTodayData 
-  };
 }
 
-// NOTA: Formatea número de temporadas para mostrar en UI
 function formatSeasons(item: any): string {
   const seasons = item.number_of_seasons || 0;
   return seasons > 0 ? `${seasons} Temporada${seasons > 1 ? 's' : ''}` : '';
@@ -130,10 +101,74 @@ function convertToAgeFormat(cert: string): string {
   return ageMap[cert] || cert;
 }
 
-// NOTA: Convierte datos de API a formato HeroCarousel (con enriquecimiento de datos)
+// NOTA: Función expandida para obtener muchas categorías de series
+async function getSeriesData() {
+  if (!TMDB_API_KEY) {
+    console.error('TMDB_API_KEY no está configurada');
+    return {
+      trendingData: { results: [] },
+      popularData: { results: [] },
+      topRatedData: { results: [] },
+      onTheAirData: { results: [] },
+      airingTodayData: { results: [] },
+      actionAdventureData: { results: [] },
+      animationData: { results: [] },
+      comedyData: { results: [] },
+      crimeData: { results: [] },
+      documentaryData: { results: [] },
+      dramaData: { results: [] },
+      familyData: { results: [] },
+      mysteryData: { results: [] },
+      scifiFantasyData: { results: [] },
+      warPoliticsData: { results: [] },
+      westernData: { results: [] },
+    };
+  }
+
+  // NOTA: 16 endpoints de series en paralelo
+  const results = await Promise.all([
+    safeFetch(`${TMDB_BASE_URL}/trending/tv/week?api_key=${TMDB_API_KEY}&language=es-ES`, 1800),
+    safeFetch(`${TMDB_BASE_URL}/tv/popular?api_key=${TMDB_API_KEY}&language=es-ES&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/tv/top_rated?api_key=${TMDB_API_KEY}&language=es-ES&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/tv/on_the_air?api_key=${TMDB_API_KEY}&language=es-ES&page=1`),
+    safeFetch(`${TMDB_BASE_URL}/tv/airing_today?api_key=${TMDB_API_KEY}&language=es-ES&page=1`),
+    // Géneros específicos
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=10759&sort_by=popularity.desc&page=1`), // Acción y Aventura
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=16&sort_by=popularity.desc&page=1`), // Animación
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=35&sort_by=popularity.desc&page=1`), // Comedia
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=80&sort_by=popularity.desc&page=1`), // Crimen
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=99&sort_by=popularity.desc&page=1`), // Documental
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=18&sort_by=popularity.desc&page=1`), // Drama
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=10751&sort_by=popularity.desc&page=1`), // Familiar
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=9648&sort_by=popularity.desc&page=1`), // Misterio
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=10765&sort_by=popularity.desc&page=1`), // Ciencia Ficción y Fantasía
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=10768&sort_by=popularity.desc&page=1`), // Guerra y Política
+    safeFetch(`${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&language=es-ES&with_genres=37&sort_by=popularity.desc&page=1`), // Western
+  ]);
+
+  return {
+    trendingData: results[0],
+    popularData: results[1],
+    topRatedData: results[2],
+    onTheAirData: results[3],
+    airingTodayData: results[4],
+    actionAdventureData: results[5],
+    animationData: results[6],
+    comedyData: results[7],
+    crimeData: results[8],
+    documentaryData: results[9],
+    dramaData: results[10],
+    familyData: results[11],
+    mysteryData: results[12],
+    scifiFantasyData: results[13],
+    warPoliticsData: results[14],
+    westernData: results[15],
+  };
+}
+
+// NOTA: Enriquece items del Hero con logos y detalles completos
 async function enrichHeroItem(item: any): Promise<CarouselItem> {
   try {
-    // NOTA: Obtención de datos adicionales para el hero (videos, logos, clasificación)
     const [videosRes, detailsRes, imagesRes, contentRes] = await Promise.all([
       fetch(`${TMDB_BASE_URL}/tv/${item.id}/videos?api_key=${TMDB_API_KEY}&language=es-ES&include_video_language=en,es`,
         { next: { revalidate: 86400 } }),
@@ -150,13 +185,11 @@ async function enrichHeroItem(item: any): Promise<CarouselItem> {
     const imagesData = imagesRes.ok ? await imagesRes.json() : { logos: [] };
     const contentData = contentRes.ok ? await contentRes.json() : { results: [] };
 
-    // NOTA: Selección de logo preferido (ES > EN > primero disponible)
     const logos = imagesData.logos || [];
     const esLogo = logos.find((l: any) => l.iso_639_1 === 'es');
     const enLogo = logos.find((l: any) => l.iso_639_1 === 'en');
     const logoPath = esLogo?.file_path || enLogo?.file_path || logos[0]?.file_path || '';
 
-    // NOTA: Obtención de clasificación por edad (ES > US)
     const rating = contentData.results?.find((r: any) => r.iso_3166_1 === 'ES')?.rating ||
       contentData.results?.find((r: any) => r.iso_3166_1 === 'US')?.rating || '';
     const ageRating = convertToAgeFormat(rating);
@@ -175,7 +208,7 @@ async function enrichHeroItem(item: any): Promise<CarouselItem> {
       genres: detailsData.genres?.slice(0, 5) || [],
       videos: videosData,
       mediaType: 'tv' as const,
-      tmdbUrl: `https://www.themoviedb.org/tv/${item.id}`, // NOTA: Corregido espacio
+      tmdbUrl: `https://www.themoviedb.org/tv/${item.id}`,
     };
   } catch (error) {
     console.error(`Error enriqueciendo serie ${item.id}:`, error);
@@ -198,7 +231,6 @@ async function enrichHeroItem(item: any): Promise<CarouselItem> {
   }
 }
 
-// NOTA: Convierte datos de API a formato PosterRow (versión ligera sin enriquecimiento)
 function toPosterItem(item: any): PosterItem {
   return {
     id: item.id,
@@ -207,7 +239,7 @@ function toPosterItem(item: any): PosterItem {
     backdrop_path: item.backdrop_path || '',
     vote_average: item.vote_average || 0,
     releaseYear: item.first_air_date ? new Date(item.first_air_date).getFullYear().toString() : '',
-    duration: '', // NOTA: PosterRow fetcheará esto automáticamente con su hook interno
+    duration: '',
     ageRating: '13+',
     overview: item.overview || '',
     genres: item.genre_ids?.map((id: number) => ({ id, name: '' })) || [],
@@ -216,18 +248,46 @@ function toPosterItem(item: any): PosterItem {
 }
 
 async function SeriesContent() {
-  const { trendingData, popularData, topRatedData, onTheAirData, airingTodayData } = await getSeriesData();
+  const {
+    trendingData,
+    popularData,
+    topRatedData,
+    onTheAirData,
+    airingTodayData,
+    actionAdventureData,
+    animationData,
+    comedyData,
+    crimeData,
+    documentaryData,
+    dramaData,
+    familyData,
+    mysteryData,
+    scifiFantasyData,
+    warPoliticsData,
+    westernData,
+  } = await getSeriesData();
 
-  // NOTA: Enriquecimiento paralelo de los 5 primeros items para el HeroCarousel
+  // NOTA: Enriquecimiento paralelo del Hero
   const heroItems = await Promise.all(
     (trendingData?.results?.slice(0, 5) || []).map(enrichHeroItem)
   );
 
-  // NOTA: Mapeo directo a PosterItem para las filas (más ligero, sin llamadas adicionales)
+  // Mapeo de todas las categorías
   const popularSeries = popularData?.results?.slice(0, 15).map(toPosterItem) || [];
   const topRatedSeries = topRatedData?.results?.slice(0, 15).map(toPosterItem) || [];
   const onTheAirSeries = onTheAirData?.results?.slice(0, 15).map(toPosterItem) || [];
   const airingTodaySeries = airingTodayData?.results?.slice(0, 15).map(toPosterItem) || [];
+  const actionAdventure = actionAdventureData?.results?.slice(0, 15).map(toPosterItem) || [];
+  const animation = animationData?.results?.slice(0, 15).map(toPosterItem) || [];
+  const comedy = comedyData?.results?.slice(0, 15).map(toPosterItem) || [];
+  const crime = crimeData?.results?.slice(0, 15).map(toPosterItem) || [];
+  const documentary = documentaryData?.results?.slice(0, 15).map(toPosterItem) || [];
+  const drama = dramaData?.results?.slice(0, 15).map(toPosterItem) || [];
+  const family = familyData?.results?.slice(0, 15).map(toPosterItem) || [];
+  const mystery = mysteryData?.results?.slice(0, 15).map(toPosterItem) || [];
+  const scifiFantasy = scifiFantasyData?.results?.slice(0, 15).map(toPosterItem) || [];
+  const warPolitics = warPoliticsData?.results?.slice(0, 15).map(toPosterItem) || [];
+  const western = westernData?.results?.slice(0, 15).map(toPosterItem) || [];
 
   if (!heroItems || heroItems.length === 0) {
     return (
@@ -242,7 +302,6 @@ async function SeriesContent() {
 
   return (
     <div className="min-h-screen bg-black">
-      {/* NOTA: HeroCarousel con configuración específica para series */}
       <HeroCarousel
         items={heroItems}
         mediaType="tv"
@@ -250,15 +309,28 @@ async function SeriesContent() {
         trailerDelay={5000}
       />
       
-      {/* 
-        NOTA: Contenedor de filas PosterRow específico para series
-        Todas las filas usan mediaType="tv" para mostrar "X Temporadas" en lugar de duración
-      */}
       <div className="relative z-20 -mt-20 space-y-8 pb-12">
-        <PosterRow title="Series Populares" items={popularSeries} mediaType="tv" />
-        <PosterRow title="Mejor Valoradas" items={topRatedSeries} mediaType="tv" />
-        <PosterRow title="En Emisión" items={onTheAirSeries} mediaType="tv" />
-        <PosterRow title="Emitiéndose Hoy" items={airingTodaySeries} mediaType="tv" />
+        {/* Tendencias y Populares */}
+        <PosterRow title="🔥 Series en Tendencia" items={popularSeries} mediaType="tv" />
+        <PosterRow title="⭐ Series Populares" items={popularSeries} mediaType="tv" />
+        <PosterRow title="🏆 Mejor Valoradas" items={topRatedSeries} mediaType="tv" />
+        
+        {/* En Emisión */}
+        <PosterRow title="📡 En Emisión" items={onTheAirSeries} mediaType="tv" />
+        <PosterRow title="📺 Emitiéndose Hoy" items={airingTodaySeries} mediaType="tv" />
+        
+        {/* Por Géneros */}
+        <PosterRow title="⚔️ Acción y Aventura" items={actionAdventure} mediaType="tv" />
+        <PosterRow title="🎨 Animación" items={animation} mediaType="tv" />
+        <PosterRow title="😂 Comedia" items={comedy} mediaType="tv" />
+        <PosterRow title="🕵️ Crimen" items={crime} mediaType="tv" />
+        <PosterRow title="📽️ Documentales" items={documentary} mediaType="tv" />
+        <PosterRow title="🎭 Drama" items={drama} mediaType="tv" />
+        <PosterRow title="👨‍👩‍👧‍👦 Familiar" items={family} mediaType="tv" />
+        <PosterRow title="🔮 Misterio" items={mystery} mediaType="tv" />
+        <PosterRow title="🚀 Ciencia Ficción y Fantasía" items={scifiFantasy} mediaType="tv" />
+        <PosterRow title="⚔️🗳️ Guerra y Política" items={warPolitics} mediaType="tv" />
+        <PosterRow title="🤠 Western" items={western} mediaType="tv" />
       </div>
     </div>
   );
