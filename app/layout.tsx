@@ -1,6 +1,7 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import { Noto_Sans_Mono } from "next/font/google";
 import Navbar from '@/app/components/layout/Navbar'
+import Footer from '@/app/components/layout/Footer'
 import KeyboardNavigation from "./components/navigation/KeyboardNavigation";
 import "./globals.css";
 
@@ -32,11 +33,14 @@ export default function RootLayout({
   return (
     <html lang="es" > 
       <body className=" h-auto overflow-y-none">
-         <section className="absolute h-screen  w-full  overflow-y-auto ">
+         <Navbar />
+         <section className=" h-screen  w-full  overflow-y-auto ">
           {children}
         </section>
-        <Navbar />
+        <Footer/>
+       
         <KeyboardNavigation />
+        
       </body>
     </html>
   );
