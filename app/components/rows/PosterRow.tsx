@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Play, Plus, ThumbsUp, ChevronDown, X, Clock, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Play, Plus, ThumbsUp, ChevronDown, X, Clock, Calendar, Check } from 'lucide-react';
 
 interface Genre {
   id: number;
@@ -31,6 +31,58 @@ interface PosterRowProps {
   mediaType?: 'movie' | 'tv';
 }
 
+// Hook para Mi Lista - FIX: Mejorado para forzar re-render
+function useMyList() {
+  const [myList, setMyList] = useState<PosterItem[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [version, setVersion] = useState(0); // Forzar actualizaciones
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('myList');
+      if (saved) {
+        try {
+          setMyList(JSON.parse(saved));
+        } catch (e) {
+          console.error('Error parsing myList:', e);
+        }
+      }
+      setIsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isLoaded && typeof window !== 'undefined') {
+      localStorage.setItem('myList', JSON.stringify(myList));
+      setVersion(v => v + 1); // Incrementar versión para forzar re-render
+    }
+  }, [myList, isLoaded]);
+
+  const addToList = useCallback((item: PosterItem) => {
+    setMyList(prev => {
+      if (prev.some(i => i.id === item.id)) {
+        console.log('Item ya existe:', item.id);
+        return prev;
+      }
+      console.log('Añadiendo item:', item.id, item.title);
+      return [...prev, { ...item, addedAt: new Date().toISOString() }];
+    });
+  }, []);
+
+  const removeFromList = useCallback((itemId: number) => {
+    console.log('Eliminando item:', itemId);
+    setMyList(prev => prev.filter(i => i.id !== itemId));
+  }, []);
+
+  const isInList = useCallback((itemId: number) => {
+    return myList.some(i => i.id === itemId);
+  }, [myList]);
+
+  return { myList, addToList, removeFromList, isInList, isLoaded, version };
+}
+
+const logoCache = new Map<string, HTMLImageElement>();
+
 export default function PosterRow({ 
   title, 
   items, 
@@ -46,6 +98,9 @@ export default function PosterRow({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAtStart, setIsAtStart] = useState(true);
   const [isAtEnd, setIsAtEnd] = useState(false);
+
+  // FIX: Incluir version en el hook para forzar re-render cuando cambia la lista
+  const { addToList, removeFromList, isInList, version } = useMyList();
 
   // Crear array infinito duplicando items
   const infiniteItems = [...items, ...items, ...items];
@@ -204,6 +259,21 @@ export default function PosterRow({
   const openModal = () => { setIsModalOpen(true); document.body.style.overflow = 'hidden'; };
   const closeModal = () => { setIsModalOpen(false); document.body.style.overflow = 'unset'; };
 
+  // FIX: Handler mejorado con logs y prevención de doble clic
+  const handleMyListToggle = useCallback((e: React.MouseEvent, item: PosterItem) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    console.log('Click en item:', item.id, item.title);
+    console.log('Estado actual en lista:', isInList(item.id));
+    
+    if (isInList(item.id)) {
+      removeFromList(item.id);
+    } else {
+      addToList(item);
+    }
+  }, [isInList, addToList, removeFromList]);
+
   if (!items?.length) return null;
 
   return (
@@ -257,10 +327,12 @@ export default function PosterRow({
               const duration = formatDuration(item);
               const details = itemDetails.get(item.id);
               const overview = details?.overview || item.overview;
+              // FIX: Usar version para forzar re-render cuando cambia la lista
+              const inMyList = isInList(item.id);
               
               return (
                 <div
-                  key={`${item.id}-${index}`}
+                  key={`${item.id}-${index}-${version}`} // FIX: Añadir version al key para forzar re-render
                   data-item-index={index}
                   className="relative flex-none w-[calc(100%/2)] sm:w-[calc(100%/3)] md:w-[calc(100%/4)] lg:w-[calc(100%/5)] xl:w-[calc(100%/6)] aspect-2/3 cursor-pointer snap-start transition-all duration-300"
                   style={{ zIndex: isHovered ? 50 : 10 }}
@@ -276,8 +348,6 @@ export default function PosterRow({
                       loading="lazy"
                     />
                     
-                    {/* SE ELIMINÓ EL BLOQUE DE NUMERACIÓN AQUÍ */}
-
                     <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/90 to-transparent p-2 opacity-0 hover:opacity-100 transition-opacity">
                       <p className="text-white text-xs font-semibold truncate">{item.title}</p>
                     </div>
@@ -291,9 +361,25 @@ export default function PosterRow({
                             <button className="w-8 h-8 rounded-full bg-white hover:bg-gray-200 flex items-center justify-center transition-colors">
                               <Play className="w-4 h-4 text-black fill-black" />
                             </button>
-                            <button className="w-8 h-8 rounded-full border-2 border-gray-400 hover:border-white flex items-center justify-center transition-colors">
-                              <Plus className="w-4 h-4 text-white" />
+                            
+                            {/* FIX: Botón Mi Lista con key único y mejor manejo de eventos */}
+                            <button 
+                              key={`mylist-${item.id}-${version}`}
+                              onClick={(e) => handleMyListToggle(e, item)}
+                              className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${
+                                inMyList 
+                                  ? 'border-white bg-white/20' 
+                                  : 'border-gray-400 hover:border-white'
+                              }`}
+                              type="button"
+                            >
+                              {inMyList ? (
+                                <Check className="w-4 h-4 text-white" />
+                              ) : (
+                                <Plus className="w-4 h-4 text-white" />
+                              )}
                             </button>
+                            
                             <button className="w-8 h-8 rounded-full border-2 border-gray-400 hover:border-white flex items-center justify-center transition-colors ml-auto">
                               <ChevronDown className="w-4 h-4 text-white" />
                             </button>
