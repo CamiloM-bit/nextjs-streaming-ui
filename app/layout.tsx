@@ -34,7 +34,7 @@ export default function RootLayout({
     <html lang="es" > 
       <body className=" h-auto overflow-y-none">
          <Navbar />
-         <section className=" h-screen  w-full  overflow-y-auto ">
+         <section className=" h-auto  w-full relative">
           {children}
         </section>
         <Footer/>
