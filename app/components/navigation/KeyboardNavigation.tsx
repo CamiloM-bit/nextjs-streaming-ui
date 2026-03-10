@@ -28,7 +28,6 @@ export default function KeyboardNavigation() {
         const rectA = a.getBoundingClientRect();
         const rectB = b.getBoundingClientRect();
         
-        // Priorizar misma fila para left/right
         if (direction === "left" || direction === "right") {
           const vertDiffA = Math.abs(rectA.top - currentRect.top);
           const vertDiffB = Math.abs(rectB.top - currentRect.top);
@@ -46,6 +45,18 @@ export default function KeyboardNavigation() {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      
+      // IGNORAR COMPLETAMENTE si estamos en un input, textarea o select
+      if (
+        target.tagName === 'INPUT' || 
+        target.tagName === 'TEXTAREA' || 
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
       const focusable = getFocusable();
       if (focusable.length === 0) return;
 
@@ -57,12 +68,18 @@ export default function KeyboardNavigation() {
 
       let next: HTMLElement | null = null;
 
-      if (e.key === "ArrowDown") { e.preventDefault(); next = getClosest(current, "down", focusable); }
-      if (e.key === "ArrowUp") { e.preventDefault(); next = getClosest(current, "up", focusable); }
+      if (e.key === "ArrowDown") { 
+        e.preventDefault(); 
+        next = getClosest(current, "down", focusable); 
+      }
+      
+      if (e.key === "ArrowUp") { 
+        e.preventDefault(); 
+        next = getClosest(current, "up", focusable); 
+      }
       
       if (e.key === "ArrowRight") {
         e.preventDefault();
-        // Solo mover si está en la misma fila
         const currentRect = current.getBoundingClientRect();
         const sameRow = focusable.filter(el => {
           const rect = el.getBoundingClientRect();
@@ -86,8 +103,11 @@ export default function KeyboardNavigation() {
           next = sameRow[0];
         }
       }
- 
-      if (e.key === "Enter") current.click();
+
+      if (e.key === "Enter") {
+        current.click();
+      }
+      
       next?.focus();
     };
 
