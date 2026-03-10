@@ -84,7 +84,7 @@ export default function SearchPage() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
-      <h1 className="text-4xl font-bold mb-8 text-center bg-gradient-to-r from-red-500 to-purple-600 bg-clip-text text-transparent">
+      <h1 className="text-4xl font-bold mb-8 text-center bg-linear-to-r from-red-500 to-purple-600 bg-clip-text text-transparent">
         Buscar Películas y Series
       </h1>
       
@@ -149,7 +149,7 @@ export default function SearchPage() {
             key={`${movie.media_type}-${movie.id}`}
             className="group bg-gray-800 rounded-xl overflow-hidden hover:scale-105 transition-all duration-300 hover:shadow-2xl hover:shadow-red-500/20"
           >
-            <div className="relative aspect-[2/3] overflow-hidden bg-gray-700">
+            <div className="relative aspect-2/3 overflow-hidden bg-gray-700">
               <Image
                 src={getImageUrl(movie.poster_path)}
                 alt={getTitle(movie)}
