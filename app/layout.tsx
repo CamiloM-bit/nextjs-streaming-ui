@@ -2,7 +2,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Noto_Sans_Mono } from "next/font/google";
 import Navbar from '@/app/components/layout/Navbar'
 import Footer from '@/app/components/layout/Footer'
-import KeyboardNavigation from "./components/navigation/KeyboardNavigation";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -33,13 +32,13 @@ export default function RootLayout({
   return (
     <html lang="es" > 
       <body className=" h-auto overflow-y-none">
-         <Navbar />
-         <section className=" h-auto  w-full relative">
+         <Navbar />    
+         <section className=" h-screen  w-full relative">
           {children}
         </section>
         <Footer/>
        
-        <KeyboardNavigation />
+        
         
       </body>
     </html>
