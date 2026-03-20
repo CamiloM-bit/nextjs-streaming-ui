@@ -1,24 +1,17 @@
 "use client";
 
-import { useState, useCallback, FormEvent } from "react";
-import { Search, Loader2, Star, Calendar, Film, X } from "lucide-react";
+import { useState, useCallback, FormEvent, useEffect } from "react";
+import { Search, X } from "lucide-react";
 import Image from "next/image";
 
 interface Movie {
   id: number;
   title: string;
   name?: string;
-  original_title: string;
-  original_name?: string;
-  overview: string;
   poster_path: string | null;
   backdrop_path: string | null;
-  release_date?: string;
-  first_air_date?: string;
-  vote_average: number;
-  vote_count: number;
-  popularity: number;
   media_type: string;
+  genre_ids: number[];
 }
 
 interface SearchResponse {
@@ -28,18 +21,57 @@ interface SearchResponse {
   total_results: number;
 }
 
-export default function SearchPage() {
+const GENRES = [
+  { id: 28, name: "Acción" },
+  { id: 35, name: "Comedia" },
+  { id: 18, name: "Drama" },
+  { id: 878, name: "Ciencia Ficción" },
+  { id: 27, name: "Terror" },
+  { id: 99, name: "Documentales" },
+  { id: 16, name: "Anime" },
+  { id: 14, name: "Fantasía" },
+  { id: 10749, name: "Romance" },
+  { id: 53, name: "Thrillers" },
+];
+
+export default function SearchClient() {
   const [query, setQuery] = useState("");
+  const [selectedGenre, setSelectedGenre] = useState<number | null>(28);
   const [movies, setMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
 
+  useEffect(() => {
+    loadPopularByGenre(selectedGenre);
+  }, [selectedGenre]);
+
+  const loadPopularByGenre = async (genreId: number | null) => {
+    setLoading(true);
+    try {
+      const genreParam = genreId ? `&with_genres=${genreId}` : "";
+      const response = await fetch(
+        `/api/tmdb/discover?sort_by=popularity.desc${genreParam}`
+      );
+      
+      if (!response.ok) throw new Error("Error");
+      
+      const data = await response.json();
+      setMovies(data.results);
+      setHasSearched(false);
+    } catch {
+      setMovies([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const searchMovies = useCallback(async (searchQuery: string) => {
-    if (!searchQuery.trim()) return;
+    if (!searchQuery.trim()) {
+      loadPopularByGenre(selectedGenre);
+      return;
+    }
     
     setLoading(true);
-    setError(null);
     setHasSearched(true);
 
     try {
@@ -47,154 +79,144 @@ export default function SearchPage() {
         `/api/tmdb/search?query=${encodeURIComponent(searchQuery)}`
       );
 
-      if (!response.ok) {
-        throw new Error("Error al buscar películas");
-      }
+      if (!response.ok) throw new Error("Error");
 
       const data: SearchResponse = await response.json();
       setMovies(data.results);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error desconocido");
+    } catch {
       setMovies([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedGenre]);
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     searchMovies(query);
   };
 
-  const clearSearch = () => {
+  const handleGenreClick = (genreId: number) => {
+    setSelectedGenre(genreId);
     setQuery("");
-    setMovies([]);
     setHasSearched(false);
-    setError(null);
+    loadPopularByGenre(genreId);
   };
 
-  const getTitle = (movie: Movie) => movie.title || movie.name || "Sin título";
-  
-  const getDate = (movie: Movie) => movie.release_date || movie.first_air_date;
+  const clearSearch = () => {
+    setQuery("");
+    setHasSearched(false);
+    loadPopularByGenre(selectedGenre);
+  };
 
-  const getImageUrl = (path: string | null, size: string = "w500") => {
+  const getTitle = (movie: Movie) => movie.title || movie.name || "";
+
+  const getImageUrl = (path: string | null) => {
     if (!path) return "/placeholder-movie.png";
-    return `https://image.tmdb.org/t/p/${size}${path}`;
+    return `https://image.tmdb.org/t/p/w500${path}`;
+  };
+
+  const getGenreName = (id: number | null) => {
+    if (!id) return "";
+    return GENRES.find(g => g.id === id)?.name || "";
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
-      <h1 className="text-4xl font-bold mb-8 text-center bg-linear-to-r from-red-500 to-purple-600 bg-clip-text text-transparent">
-        Buscar Películas y Series
-      </h1>
-      
-      <form onSubmit={handleSubmit} className="relative max-w-2xl mx-auto mb-12">
-        <div className="relative group">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Escribe para buscar..."
-            className="w-full px-6 py-4 bg-gray-800 border-2 border-gray-700 rounded-full text-white placeholder-gray-400 focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/20 transition-all duration-300 pr-24 text-lg"
-          />
-          
-          {query && (
-            <button
-              type="button"
-              onClick={clearSearch}
-              className="absolute right-14 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-white transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          )}
-          
-          <button
-            type="submit"
-            disabled={loading || !query.trim()}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-full transition-colors duration-200"
-          >
-            {loading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Search className="w-5 h-5" />
+    <>
+      {/* Barra de búsqueda */}
+      <div className="sticky top-0 mb-20 z-50  bg-black/95 backdrop-blur-sm px-4 py-4 pt-20">
+        <form onSubmit={handleSubmit} className="max-w-2xl ml-8  border border-blue-200">
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Títulos, personas, géneros"
+              className="w-full bg-gray-800/50 border border-gray-700 rounded-lg pl-12 pr-10 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-gray-500 transition-colors"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={clearSearch}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
             )}
-          </button>
-        </div>
-      </form>
+          </div>
+        </form>
+      </div>
 
-      {loading && (
-        <div className="flex flex-col items-center justify-center py-20 space-y-4">
-          <Loader2 className="w-12 h-12 animate-spin text-red-500" />
-          <p className="text-gray-400">Buscando...</p>
+      {/* Filtros de género */}
+      <div className="px-4 py-4 overflow-x-auto">
+        <div className="flex gap-2 max-w-7xl mx-auto">
+          {GENRES.map((genre) => (
+            <button
+              key={genre.id}
+              onClick={() => handleGenreClick(genre.id)}
+              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                selectedGenre === genre.id && !hasSearched
+                  ? "bg-red-600 text-white"
+                  : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+              }`}
+            >
+              {genre.name}
+            </button>
+          ))}
         </div>
-      )}
+      </div>
 
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-4 text-center text-red-400 max-w-2xl mx-auto">
-          {error}
-        </div>
-      )}
+      {/* Título de sección */}
+      <div className="px-4 mb-4 max-w-7xl mx-auto">
+        <h2 className="text-lg font-semibold text-gray-200">
+          {hasSearched 
+            ? `Resultados de "${query}"`
+            : `Búsquedas populares en ${getGenreName(selectedGenre)}`
+          }
+        </h2>
+      </div>
 
-      {!loading && hasSearched && movies.length === 0 && !error && (
-        <div className="text-center py-20 text-gray-400">
-          <Film className="w-16 h-16 mx-auto mb-4 opacity-50" />
-          <p className="text-xl">No se encontraron resultados</p>
-          <p className="text-sm mt-2">Intenta con otros términos</p>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 max-w-7xl mx-auto">
-        {movies.map((movie) => (
-          <div
-            key={`${movie.media_type}-${movie.id}`}
-            className="group bg-gray-800 rounded-xl overflow-hidden hover:scale-105 transition-all duration-300 hover:shadow-2xl hover:shadow-red-500/20"
-          >
-            <div className="relative aspect-2/3 overflow-hidden bg-gray-700">
+      {/* Grid de resultados */}
+      <div className="px-4 max-w-7xl mx-auto">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+          {movies.map((movie) => (
+            <div
+              key={`${movie.media_type}-${movie.id}`}
+              className="group relative aspect-video rounded-lg overflow-hidden bg-gray-800 cursor-pointer"
+            >
               <Image
-                src={getImageUrl(movie.poster_path)}
+                src={getImageUrl(movie.backdrop_path || movie.poster_path)}
                 alt={getTitle(movie)}
                 fill
-                className="object-cover group-hover:opacity-75 transition-opacity"
-                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                className="object-cover group-hover:scale-105 transition-transform duration-300"
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
               />
               
-              <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm px-2 py-1 rounded-lg flex items-center gap-1">
-                <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
-                <span className="text-sm font-bold">
-                  {movie.vote_average.toFixed(1)}
-                </span>
-              </div>
-
-              <div className="absolute top-2 left-2 bg-red-600/80 backdrop-blur-sm px-2 py-1 rounded text-xs font-bold uppercase">
-                {movie.media_type === 'movie' ? 'Película' : 'Serie'}
-              </div>
-            </div>
-
-            <div className="p-4 space-y-2">
-              <h3 className="font-bold text-lg line-clamp-1 group-hover:text-red-400 transition-colors">
-                {getTitle(movie)}
-              </h3>
+              <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
               
-              <p className="text-sm text-gray-300 line-clamp-2 h-10">
-                {movie.overview || "Sin descripción"}
-              </p>
-
-              <div className="flex items-center gap-4 text-sm text-gray-400 pt-2">
-                {getDate(movie) && (
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-4 h-4" />
-                    <span>{new Date(getDate(movie)!).getFullYear()}</span>
-                  </div>
-                )}
-                <div className="flex items-center gap-1">
-                  <Star className="w-4 h-4" />
-                  <span>{movie.vote_count.toLocaleString()}</span>
-                </div>
+              <div className="absolute bottom-0 left-0 right-0 p-3">
+                <h3 className="text-sm font-medium line-clamp-2 group-hover:text-red-400 transition-colors">
+                  {getTitle(movie)}
+                </h3>
               </div>
+
+              <div className="absolute inset-0 border-2 border-transparent group-hover:border-white/20 rounded-lg transition-colors" />
             </div>
+          ))}
+        </div>
+
+        {loading && (
+          <div className="flex justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" />
           </div>
-        ))}
+        )}
+
+        {!loading && movies.length === 0 && (
+          <div className="text-center py-20 text-gray-500">
+            <p>No se encontraron resultados</p>
+          </div>
+        )}
       </div>
-    </div>
+    </>
   );
 }
