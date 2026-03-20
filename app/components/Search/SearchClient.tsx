@@ -123,7 +123,7 @@ export default function SearchClient() {
   return (
     <>
       {/* Barra de búsqueda */}
-      <div className="sticky top-0 mb-20 z-50  bg-black/95 backdrop-blur-sm px-4 py-4 pt-20">
+      <div className="sticky top-0  z-50  bg-black/95 backdrop-blur-sm px-4 py-4 pt-20">
         <form onSubmit={handleSubmit} className="max-w-2xl ml-8  border border-blue-200">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
