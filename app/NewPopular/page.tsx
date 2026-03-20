@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import HeroCarousel from "@/app/components/hero/HeroCarousel";
 import PosterRow from "@/app/components/rows/PosterRow";
 import MediaLoader from "@/app/components/ui/loaders/MediaLoader";
@@ -411,9 +410,5 @@ async function NewPopularContent() {
 }
 
 export default function Page() {
-  return (
-    <Suspense fallback={<MediaLoader type="movies" />}>
-      <NewPopularContent />
-    </Suspense>
-  );
+  return <NewPopularContent />;
 }

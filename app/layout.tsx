@@ -1,7 +1,9 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import { Noto_Sans_Mono } from "next/font/google";
+import { Suspense } from "react";
 import Navbar from '@/app/components/layout/Navbar'
 import Footer from '@/app/components/layout/Footer'
+import MediaLoader from '@/app/components/ui/loaders/MediaLoader'
 import "./globals.css";
 
 const geistSans = Geist({
@@ -33,13 +35,12 @@ export default function RootLayout({
     <html lang="es" > 
       <body className=" h-auto overflow-y-none">
          <Navbar />    
-         <section className=" h-screen  w-full relative">
-          {children}
-        </section>
-        <Footer/>
-       
-        
-        
+         <Suspense fallback={<MediaLoader type="movies" />}>
+           <section className=" h-screen  w-full relative">
+             {children}
+           </section>
+           <Footer/>
+         </Suspense>
       </body>
     </html>
   );

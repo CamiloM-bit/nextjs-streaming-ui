@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import HeroCarousel from "@/app/components/hero/HeroCarousel";
 import PosterRow from "@/app/components/rows/PosterRow";
 import MediaLoader from "@/app/components/ui/loaders/MediaLoader";
@@ -337,9 +336,5 @@ async function SeriesContent() {
 }
 
 export default function Page() {
-  return (
-    <Suspense fallback={<MediaLoader type="series" />}>
-      <SeriesContent />
-    </Suspense>
-  );
+  return <SeriesContent />;
 }
